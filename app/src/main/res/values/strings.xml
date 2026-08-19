@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Price Watcher</string>
+    <string name="app_skeleton_message">Price Watcher — build pipeline OK. Features come next.</string>
+</resources>
