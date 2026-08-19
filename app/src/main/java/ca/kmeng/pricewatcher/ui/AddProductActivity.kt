@@ -1,6 +1,7 @@
 package ca.kmeng.pricewatcher.ui
 
 import android.os.Bundle
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ProgressBar
@@ -12,11 +13,15 @@ import ca.kmeng.pricewatcher.data.AppDatabase
 import ca.kmeng.pricewatcher.data.PriceRecordEntity
 import ca.kmeng.pricewatcher.data.ProductEntity
 import ca.kmeng.pricewatcher.data.ProductRepository
+import ca.kmeng.pricewatcher.extraction.FetchResult
 import ca.kmeng.pricewatcher.extraction.HtmlFetcher
+import ca.kmeng.pricewatcher.extraction.PriceExtractionResult
 import ca.kmeng.pricewatcher.extraction.PriceExtractor
+import ca.kmeng.pricewatcher.extraction.WebViewPriceFetcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AddProductActivity : AppCompatActivity() {
 
@@ -33,6 +38,7 @@ class AddProductActivity : AppCompatActivity() {
         val saveButton = findViewById<Button>(R.id.saveButton)
         val statusText = findViewById<TextView>(R.id.addStatusText)
         val progressBar = findViewById<ProgressBar>(R.id.addProgressBar)
+        val hiddenWebView = findViewById<WebView>(R.id.hiddenWebView)
 
         saveButton.setOnClickListener {
             val url = urlInput.text.toString().trim()
@@ -42,31 +48,60 @@ class AddProductActivity : AppCompatActivity() {
             }
 
             progressBar.visibility = android.view.View.VISIBLE
-            statusText.text = "Fetching page and extracting price…"
             saveButton.isEnabled = false
 
             lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    val html = HtmlFetcher.fetch(url)
-                    if (html == null) {
-                        null
-                    } else {
-                        PriceExtractor.extractFromHtml(url, html)
+                statusText.text = "Fetching page (static)…"
+
+                var result: PriceExtractionResult? = null
+                var staticFailureReason: String? = null
+
+                val fetchResult = withContext(Dispatchers.IO) { HtmlFetcher.fetch(url) }
+                when (fetchResult) {
+                    is FetchResult.Success -> {
+                        result = withContext(Dispatchers.IO) {
+                            PriceExtractor.extractFromHtml(url, fetchResult.html)
+                        }
+                    }
+                    is FetchResult.Failure -> {
+                        staticFailureReason = fetchResult.reason
+                    }
+                }
+
+                if (result == null || !result.success) {
+                    statusText.text = "Static fetch " +
+                        (staticFailureReason?.let { "failed ($it)" } ?: "found no price") +
+                        " — trying JS-rendered fetch…"
+
+                    val renderedHtml = withTimeoutOrNull(25000) {
+                        WebViewPriceFetcher.fetchRenderedHtml(hiddenWebView, url)
+                    }
+
+                    if (renderedHtml != null) {
+                        val jsResult = withContext(Dispatchers.IO) {
+                            PriceExtractor.extractFromHtml(url, renderedHtml)
+                        }
+                        result = if (jsResult.success) {
+                            jsResult.copy(strategyUsed = "webview:${jsResult.strategyUsed}")
+                        } else {
+                            jsResult
+                        }
+                    } else if (result == null) {
+                        result = PriceExtractionResult(
+                            success = false,
+                            failureReason = "Static fetch: ${staticFailureReason ?: "unknown error"}. " +
+                                "WebView fetch: timed out or returned no content."
+                        )
                     }
                 }
 
                 progressBar.visibility = android.view.View.GONE
                 saveButton.isEnabled = true
 
-                if (result == null) {
-                    statusText.text = "Unable to automatically extract the price from this page. " +
-                        "(Could not fetch the page — check the URL or your connection.)"
-                    return@launch
-                }
-
-                if (!result.success || result.price == null) {
-                    statusText.text = "Unable to automatically extract the price from this page. " +
-                        "(${result.failureReason ?: "no price detected"})"
+                val finalResult = result
+                if (finalResult == null || !finalResult.success || finalResult.price == null) {
+                    statusText.text = "Unable to automatically extract the price from this page.\n" +
+                        (finalResult?.failureReason ?: "Unknown failure.")
                     return@launch
                 }
 
@@ -78,11 +113,11 @@ class AddProductActivity : AppCompatActivity() {
 
                 val product = ProductEntity(
                     url = url,
-                    name = result.productName ?: url,
+                    name = finalResult.productName ?: url,
                     storeName = storeName,
-                    imageUrl = result.imageUrl,
-                    currentPrice = result.price,
-                    currency = result.currency,
+                    imageUrl = finalResult.imageUrl,
+                    currentPrice = finalResult.price,
+                    currency = finalResult.currency,
                     lastCheckedAt = System.currentTimeMillis()
                 )
 
@@ -90,13 +125,13 @@ class AddProductActivity : AppCompatActivity() {
                 repository.recordPrice(
                     PriceRecordEntity(
                         productId = productId,
-                        price = result.price,
-                        currency = result.currency,
+                        price = finalResult.price,
+                        currency = finalResult.currency,
                         sourceUrl = url
                     )
                 )
 
-                statusText.text = "Saved. Price: ${result.price} ${result.currency} (via ${result.strategyUsed})"
+                statusText.text = "Saved. Price: ${finalResult.price} ${finalResult.currency} (via ${finalResult.strategyUsed})"
                 urlInput.setText("")
                 finish()
             }
