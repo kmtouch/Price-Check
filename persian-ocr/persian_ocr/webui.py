@@ -26,16 +26,28 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
 def parse_multipart(body: bytes, boundary: bytes) -> Tuple[List[Tuple[str, bytes]], Dict[str, str]]:
-    """Minimal multipart/form-data parser (files and plain fields)."""
+    """Minimal multipart/form-data parser (files and plain fields).
+
+    Only ever strips the exact CRLF that RFC 2046 puts around a part's body
+    (one after the boundary line, one before the next boundary) — never an
+    arbitrary run of ``\r``/``\n``. A blanket strip would corrupt any binary
+    upload whose last byte happens to be 0x0D or 0x0A, which is not rare
+    enough to ignore for photos and PDFs coming from a phone.
+    """
     files: List[Tuple[str, bytes]] = []
     fields: Dict[str, str] = {}
     delimiter = b"--" + boundary
-    for part in body.split(delimiter):
-        part = part.strip(b"\r\n")
-        if not part or part == b"--":
-            continue
-        header_blob, _, content = part.partition(b"\r\n\r\n")
-        if not _:
+    raw_parts = body.split(delimiter)
+    # The first split segment is whatever preceded the opening boundary
+    # (normally empty) and the last is the closing "--\r\n" tail; only the
+    # segments between are real parts.
+    for part in raw_parts[1:-1]:
+        if part.startswith(b"\r\n"):
+            part = part[2:]
+        if part.endswith(b"\r\n"):
+            part = part[:-2]
+        header_blob, sep, content = part.partition(b"\r\n\r\n")
+        if not sep:
             continue
         headers = header_blob.decode("utf-8", "replace")
         disposition = next(
@@ -46,7 +58,6 @@ def parse_multipart(body: bytes, boundary: bytes) -> Tuple[List[Tuple[str, bytes
         filename_match = re.search(r'filename="([^"]*)"', disposition)
         if not name_match:
             continue
-        content = content.rstrip(b"\r\n")
         if filename_match and filename_match.group(1):
             files.append((Path(filename_match.group(1)).name, content))
         else:

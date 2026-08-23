@@ -1,0 +1,45 @@
+<resources>
+    <string name="app_name">Persian OCR</string>
+    <string name="settings_title">Server settings</string>
+    <string name="result_title">Converted text</string>
+
+    <string name="server_url_label">Server address</string>
+    <string name="server_url_hint">http://192.168.1.23:8765</string>
+    <string name="server_url_help">Run \"persian-ocr serve --host 0.0.0.0\" on a
+        computer with Claude Code (or an API key) and enter its address here.
+        The phone and that computer must be on the same network.</string>
+    <string name="test_connection">Test connection</string>
+    <string name="connection_ok">Connected — %1$s</string>
+    <string name="connection_failed">Could not connect: %1$s</string>
+
+    <string name="pick_files">Choose photos or PDF</string>
+    <string name="take_photo">Take a photo</string>
+    <string name="files_chosen">%1$d file(s) selected</string>
+    <string name="no_files_chosen">No files selected yet</string>
+    <string name="convert">Convert to text</string>
+    <string name="converting">Reading the page(s)… this can take a minute or two</string>
+    <string name="settings">Settings</string>
+
+    <string name="opt_verify">Verify against the image (recommended)</string>
+    <string name="opt_normalize">Normalise Persian characters</string>
+    <string name="opt_page_numbers">Keep printed page numbers</string>
+    <string name="opt_passes">OCR passes per page</string>
+
+    <string name="no_server_set">Set the server address first, in Settings.</string>
+    <string name="upload_failed">Conversion failed: %1$s</string>
+    <string name="upload_failed_hint">Check that the server is running and
+        reachable, and that both devices are on the same network.</string>
+
+    <string name="confidence_label">Confidence: %1$.1f%%</string>
+    <string name="words_pages_label">%1$d words · %2$d page(s)</string>
+    <string name="corrections_label">%1$d correction(s) applied by verification</string>
+    <string name="low_confidence_label">Pages worth a second look: %1$s</string>
+    <string name="copy">Copy</string>
+    <string name="share">Share</string>
+    <string name="save">Save as .txt</string>
+    <string name="copied">Copied to clipboard</string>
+    <string name="saved">Saved</string>
+    <string name="save_failed">Could not save the file: %1$s</string>
+    <string name="camera_permission_denied">Camera permission is needed to take a photo.</string>
+    <string name="save_settings">Save</string>
+</resources>

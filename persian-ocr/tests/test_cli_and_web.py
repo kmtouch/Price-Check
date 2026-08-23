@@ -166,3 +166,23 @@ def test_verify_command_corrects_an_existing_transcription(tmp_path, sample_imag
     assert code == 0
     assert "کتاب" in output.read_text(encoding="utf-8")
     assert (tmp_path / "fixed.report.json").exists()
+
+
+def test_multipart_parser_does_not_truncate_binary_content_ending_in_crlf_bytes():
+    # A blanket strip of trailing \r/\n would eat real bytes here; the exact
+    # CRLF-only strip must not.
+    payload = b"\x89PNG\r\n\x1a\n\x00\x00\x0d\x0a"
+    boundary = b"B"
+    body = (
+        b"--B\r\n"
+        b'Content-Disposition: form-data; name="files"; filename="page.png"\r\n\r\n'
+        + payload
+        + b"\r\n--B--\r\n"
+    )
+    files, _ = parse_multipart(body, boundary)
+    assert files == [("page.png", payload)]
+
+
+def test_multipart_parser_handles_no_parts():
+    files, fields = parse_multipart(b"--B--\r\n", b"B")
+    assert files == [] and fields == {}

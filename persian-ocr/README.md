@@ -242,7 +242,7 @@ reading accuracy rather than encoding choices; `--strict` compares literally.
 
 ```bash
 pip install -e ".[dev]"
-python -m pytest -q          # 164 tests, no network needed
+python -m pytest -q          # 166 tests, no network needed
 ```
 
 The test suite runs the whole pipeline against a real sample page with a
