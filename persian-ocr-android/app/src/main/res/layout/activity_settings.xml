@@ -69,14 +69,14 @@
             android:layout_height="wrap_content"
             android:layout_marginVertical="20dp" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/verifySwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:checked="true"
             android:text="@string/opt_verify" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/normalizeSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -84,7 +84,7 @@
             android:checked="true"
             android:text="@string/opt_normalize" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/pageNumbersSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
