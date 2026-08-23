@@ -23,6 +23,11 @@ persian-ocr serve --host 0.0.0.0 --port 8765
 `http://192.168.1.23:8765`)، «آزمایشِ اتصال» را بزنید، بعد عکس یا PDF
 انتخاب کنید و «تبدیل به متن» را بزنید.
 
+هیچ سقفی برای شمارِ صفحه‌ها نیست — تبدیل روی سرور، در پس‌زمینه اجرا می‌شود؛
+می‌توانید از اپ خارج شوید و بعداً برگردید، همچنان ادامه دارد یا تمام شده است.
+گزینه‌ی «تعدادِ پاس‌ها» در تنظیمات به تعدادِ صفحه‌ها ربطی ندارد — می‌گوید هر
+صفحه چند بار جداگانه خوانده شود تا خطاها بررسی‌متقابل شوند.
+
 ## نکته‌ی امنیتی
 
 ارتباطِ اپ با سرور رمزنگاری‌شده نیست (HTTP ساده، برای استفاده در شبکه‌ی
@@ -53,6 +58,17 @@ Code login belongs to the server you point it at, never to the phone.
 3. Install the app, open Settings, enter the computer's address
    (e.g. `http://192.168.1.23:8765`), tap "Test connection", then pick photos
    or a PDF and tap "Convert to text".
+
+### Large documents
+
+There is no page limit — a conversion runs as a background job on the
+server, not inside one HTTP request, so a 100-page PDF works the same way a
+single photo does. You can leave the app (even close it) while a job runs;
+reopening it resumes checking progress automatically, because the server
+keeps the job going regardless of whether anything is polling it. The
+"OCR passes" setting is unrelated to page count — it controls how many times
+*each* page is independently re-read to cross-check for errors (1–3), not how
+many pages get converted.
 
 ### Why a server at all
 
@@ -89,10 +105,10 @@ push that touches this directory.
 
 ```
 app/src/main/java/ca/kmeng/persianocr/
-  net/OcrClient.kt      — multipart upload to /convert, no external HTTP library
-  net/Prefs.kt          — server address + options, in SharedPreferences
+  net/OcrClient.kt      — submits a job to /convert, polls /jobs/<id>; no external HTTP library
+  net/Prefs.kt          — server address + options + the in-flight job id, in SharedPreferences
   net/ResultHolder.kt   — passes the (possibly large) result between activities
-  ui/MainActivity.kt    — pick files / take a photo / convert
+  ui/MainActivity.kt    — pick files / take a photo / submit / poll for progress / resume on reopen
   ui/SettingsActivity.kt — server address, test connection, OCR options
   ui/ResultActivity.kt  — show the text; copy / share / save as .txt
 ```

@@ -42,4 +42,9 @@
     <string name="save_failed">Could not save the file: %1$s</string>
     <string name="camera_permission_denied">Camera permission is needed to take a photo.</string>
     <string name="save_settings">Save</string>
+    <string name="opt_strip_headers">Strip repeated headers/footers/watermarks</string>
+    <string name="opt_passes_help">This does not limit how many pages are converted — there is no page limit. It controls how many times each page is independently re-read to cross-check for errors.</string>
+    <string name="converting_background_hint">You can leave the app; the conversion keeps running on the server and will still be here when you come back.</string>
+    <string name="page_progress">Page %1$d of %2$d</string>
+    <string name="resuming_job">Resuming a conversion that was already in progress…</string>
 </resources>

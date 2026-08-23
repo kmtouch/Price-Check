@@ -176,9 +176,30 @@ persian-ocr serve --open                    # local browser UI
 | `--engine claude-cli` | use the signed-in Claude Code CLI instead of an API key |
 | `--engine tesseract` | offline fallback; needs `tesseract-ocr-fas`, and cannot verify |
 | `--prefer-text-layer` | if the PDF already has selectable text, extract that instead |
+| `--strip-headers-footers` | drop a running header/footer/watermark line that repeats at the top or bottom of enough pages (see below) |
 
 Runs are cached on the image bytes, so re-running after changing output options
-costs nothing, and an interrupted job resumes where it stopped.
+costs nothing, and an interrupted job resumes where it stopped. Nothing limits
+how many pages a single run can process — `--passes` controls how many times
+*each* page is independently re-read for cross-checking, not how many pages
+get converted.
+
+### Stripping running headers, footers and watermarks
+
+`--strip-headers-footers` looks for a line that shows up, worded identically,
+as the first or last block of enough pages — a book title repeated at the top
+of every page, a publisher line at the bottom, a page banner that only
+differs by its own page number (digits are ignored when comparing, so a
+changing page number doesn't defeat the match). That repetition is the
+signal: a real paragraph that happens to open two pages with the same
+sentence is left alone, because two is never enough to trigger it.
+
+This is a second line of defence, not the first — the OCR prompt already
+tells the model to leave application chrome and watermark text out of the
+transcription entirely (`ignored_overlays` in the report). The flag catches
+what gets through anyway, plus genuine printed running headers/footers, which
+the prompt does not touch because they are real page content, not noise; only
+remove them if you actually don't want them in the output. Off by default.
 
 ## Cost and speed
 
@@ -187,6 +208,31 @@ One page ≈ 2 slices × 2 passes + 1 verification ≈ 5 requests. With
 every run is in the report. `--passes 1 --no-verify` cuts it to about a fifth,
 and `--model claude-sonnet-5` roughly halves the rest — both trade accuracy for
 price, which is why neither is the default.
+
+## The `serve` HTTP API — for large batches and other clients
+
+`persian-ocr serve` runs conversions as **background jobs**, not inside the
+request: a 100-page document can easily take over an hour, and holding one
+HTTP connection open that long is fragile — a phone locking its screen, a
+laptop sleeping, or a flaky Wi-Fi hop all kill an in-flight request and lose
+the whole run. `POST /convert` hands back a job id immediately; the job keeps
+running on the server, and the caller polls for progress and, eventually, the
+result. This is what the Android app and the built-in browser page both do.
+
+```
+POST /convert   multipart/form-data: files[], verify, normalize,
+                page_numbers, strip_headers, passes
+                → 202 {"job_id": "..."}
+
+GET /jobs/<id>  → {"status": "queued"|"running"|"done"|"error",
+                    "pages_total": int|null, "pages_done": int,
+                    "log": [...], "result": {...}|null, "error": str|null}
+```
+
+A finished job's result stays available for 6 hours, so a client that lost
+its connection mid-run can reconnect later and still collect the answer — the
+Android app stores the job id and resumes polling automatically the next time
+it opens.
 
 ## Measured on real pages
 
@@ -242,7 +288,7 @@ reading accuracy rather than encoding choices; `--strict` compares literally.
 
 ```bash
 pip install -e ".[dev]"
-python -m pytest -q          # 166 tests, no network needed
+python -m pytest -q          # 181 tests, no network needed
 ```
 
 The test suite runs the whole pipeline against a real sample page with a

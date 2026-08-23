@@ -36,6 +36,18 @@ def test_convert_flags_are_wired_through():
     assert [str(path) for path in settings.lexicon_paths] == ["a.txt"]
 
 
+def test_strip_headers_footers_flag_is_wired_through():
+    from persian_ocr.cli import _settings_from_args
+
+    off = _settings_from_args(build_parser().parse_args(["convert", "book.pdf"]))
+    assert off.strip_repeated_boundaries is False
+
+    on = _settings_from_args(
+        build_parser().parse_args(["convert", "book.pdf", "--strip-headers-footers"])
+    )
+    assert on.strip_repeated_boundaries is True
+
+
 def test_benchmark_prints_accuracy(tmp_path, capsys):
     hypothesis = tmp_path / "hyp.txt"
     reference = tmp_path / "ref.txt"

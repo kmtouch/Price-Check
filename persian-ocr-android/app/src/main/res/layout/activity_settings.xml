@@ -92,6 +92,14 @@
             android:checked="true"
             android:text="@string/opt_page_numbers" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/stripHeadersSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:checked="true"
+            android:text="@string/opt_strip_headers" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -127,6 +135,13 @@
                 android:layout_marginStart="24dp"
                 android:text="3" />
         </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/opt_passes_help"
+            android:textAppearance="?attr/textAppearanceCaption" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveSettingsButton"

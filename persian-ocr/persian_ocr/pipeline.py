@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
 from .assemble import PageResult, merge_tiles, paragraph_stats, render_document
+from .repeats import detect_repeated_boundaries, strip_repeated_boundaries
 from .cache import Cache
 from .config import Settings
 from .consensus import reconcile
@@ -198,6 +199,10 @@ class Pipeline:
             legibility=result.legibility,
         )
         result.usage = {"seconds": round(time.time() - started, 2)}
+        self.progress(
+            f"page {page.index + 1} done ({result.confidence * 100:.0f}% confidence, "
+            f"{result.usage['seconds']}s)"
+        )
         return result
 
     def _verify_page(
@@ -294,6 +299,20 @@ class Pipeline:
         for page in results:
             page.flags = run_checks(page.blocks, document_lexicon, []).flags
 
+        boundaries_stripped = 0
+        if self.settings.strip_repeated_boundaries and len(results) > 1:
+            signatures = detect_repeated_boundaries([page.blocks for page in results])
+            if signatures:
+                cleaned = strip_repeated_boundaries([page.blocks for page in results], signatures)
+                for page, blocks in zip(results, cleaned):
+                    boundaries_stripped += len(page.blocks) - len(blocks)
+                    page.blocks = blocks
+                if boundaries_stripped:
+                    self.progress(
+                        f"stripped {len(signatures)} repeated header/footer/watermark "
+                        f"line(s) across {boundaries_stripped} occurrence(s)"
+                    )
+
         text = render_document(
             results,
             page_marks="number" if self.settings.keep_page_numbers else "none",
@@ -325,6 +344,7 @@ class Pipeline:
                 "engine": self.engine.name,
                 "model": self.settings.model if self.engine.name == "anthropic" else self.engine.name,
                 "lexicon_coverage": round(document_lexicon.coverage(text), 4),
+                "repeated_boundaries_stripped": boundaries_stripped,
             }
         )
         return RunResult(

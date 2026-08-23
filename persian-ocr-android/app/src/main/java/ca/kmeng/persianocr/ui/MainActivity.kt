@@ -1,34 +1,42 @@
 package ca.kmeng.persianocr.ui
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import ca.kmeng.persianocr.R
 import ca.kmeng.persianocr.databinding.ActivityMainBinding
+import ca.kmeng.persianocr.net.JobHandle
+import ca.kmeng.persianocr.net.JobStatus
 import ca.kmeng.persianocr.net.OcrClient
-import ca.kmeng.persianocr.net.OcrOutcome
 import ca.kmeng.persianocr.net.Prefs
 import ca.kmeng.persianocr.net.ResultHolder
-import ca.kmeng.persianocr.net.UploadFile
+import ca.kmeng.persianocr.net.SubmitOutcome
 import ca.kmeng.persianocr.net.uploadFileFrom
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** How often to check on an in-flight job. A page takes at least tens of
+ * seconds to read, so there is no benefit to polling faster than this — it
+ * would only cost battery and the server a few extra requests. */
+private const val POLL_INTERVAL_MS = 2500L
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var chosenUris: List<Uri> = emptyList()
     private var pendingCameraUri: Uri? = null
+    private var polling = false
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
@@ -78,6 +86,16 @@ class MainActivity : AppCompatActivity() {
             serverUrl
         }
         updateConvertEnabled()
+        resumePendingJobIfAny()
+    }
+
+    private fun resumePendingJobIfAny() {
+        if (polling) return
+        val baseUrl = OcrClient.normalizeBaseUrl(Prefs.serverUrl(this)) ?: return
+        val job = Prefs.pendingJob(this) ?: return
+        setBusy(true)
+        binding.progressLabel.text = getString(R.string.resuming_job)
+        trackJob(baseUrl, job)
     }
 
     private fun setChosenFiles(uris: List<Uri>) {
@@ -91,7 +109,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateConvertEnabled() {
-        binding.convertButton.isEnabled = chosenUris.isNotEmpty() && Prefs.serverUrl(this).isNotBlank()
+        binding.convertButton.isEnabled = !polling && chosenUris.isNotEmpty() && Prefs.serverUrl(this).isNotBlank()
     }
 
     private fun requestCameraThenLaunch() {
@@ -116,26 +134,75 @@ class MainActivity : AppCompatActivity() {
             return
         }
         setBusy(true)
+        binding.progressLabel.text = getString(R.string.converting)
         val resolver = contentResolver
         val files = chosenUris.mapIndexed { index, uri -> uploadFileFrom(resolver, uri, index + 1) }
         val options = Prefs.options(this)
 
         lifecycleScope.launch {
-            val outcome = withContext(Dispatchers.IO) { OcrClient.convert(baseUrl, files, options) }
-            setBusy(false)
+            val outcome = withContext(Dispatchers.IO) { OcrClient.submit(baseUrl, files, options) }
             when (outcome) {
-                is OcrOutcome.Success -> {
-                    ResultHolder.result = outcome.result
-                    startActivity(Intent(this@MainActivity, ResultActivity::class.java))
+                is SubmitOutcome.Submitted -> {
+                    Prefs.setPendingJob(this@MainActivity, outcome.job)
+                    trackJob(baseUrl, outcome.job)
                 }
-                is OcrOutcome.Failure -> showError(getString(R.string.upload_failed, outcome.reason))
+                is SubmitOutcome.Failure -> {
+                    setBusy(false)
+                    showError(getString(R.string.upload_failed, outcome.reason))
+                }
             }
+        }
+    }
+
+    /** Polls a job to completion, updating progress as it goes. Safe to call
+     * for a job this launch already submitted, or one resumed from a prior
+     * app session — either way the job itself lives entirely on the server. */
+    private fun trackJob(baseUrl: String, job: JobHandle) {
+        polling = true
+        lifecycleScope.launch {
+            while (true) {
+                val status = withContext(Dispatchers.IO) { OcrClient.poll(baseUrl, job) }
+                when (status) {
+                    is JobStatus.Running -> {
+                        renderProgress(status)
+                        delay(POLL_INTERVAL_MS)
+                    }
+                    is JobStatus.Done -> {
+                        Prefs.setPendingJob(this@MainActivity, null)
+                        polling = false
+                        setBusy(false)
+                        ResultHolder.result = status.result
+                        startActivity(Intent(this@MainActivity, ResultActivity::class.java))
+                        return@launch
+                    }
+                    is JobStatus.Failed -> {
+                        Prefs.setPendingJob(this@MainActivity, null)
+                        polling = false
+                        setBusy(false)
+                        showError(getString(R.string.upload_failed, status.reason))
+                        return@launch
+                    }
+                }
+            }
+        }
+    }
+
+    private fun renderProgress(status: JobStatus.Running) {
+        val total = status.pagesTotal
+        if (total != null && total > 0) {
+            binding.progressLabel.text = getString(R.string.page_progress, status.pagesDone, total)
+            binding.progressBarDeterminate.visibility = View.VISIBLE
+            binding.progressBarDeterminate.progress = (100 * status.pagesDone / total).coerceIn(0, 100)
+        } else {
+            binding.progressBarDeterminate.visibility = View.GONE
+            binding.progressLabel.text = status.lastLogLine ?: getString(R.string.converting)
         }
     }
 
     private fun setBusy(busy: Boolean) {
         binding.progressGroup.visibility = if (busy) View.VISIBLE else View.GONE
-        binding.convertButton.isEnabled = !busy && chosenUris.isNotEmpty()
+        if (!busy) binding.progressBarDeterminate.visibility = View.GONE
+        binding.convertButton.isEnabled = !busy && chosenUris.isNotEmpty() && Prefs.serverUrl(this).isNotBlank()
         binding.pickFilesButton.isEnabled = !busy
         binding.takePhotoButton.isEnabled = !busy
         binding.settingsButton.isEnabled = !busy

@@ -42,4 +42,9 @@
     <string name="save_failed">ذخیره ناموفق بود: %1$s</string>
     <string name="camera_permission_denied">برای گرفتنِ عکس، دسترسیِ دوربین لازم است.</string>
     <string name="save_settings">ذخیره</string>
+    <string name="opt_strip_headers">حذفِ سربرگ/پابرگ/واترمارکِ تکراری</string>
+    <string name="opt_passes_help">این گزینه تعدادِ صفحه‌های قابلِ تبدیل را محدود نمی‌کند — هیچ سقفی برای شمارِ صفحه‌ها وجود ندارد. این عدد می‌گوید هر صفحه چند بار جداگانه بازخوانی شود تا خطاها بررسی‌متقابل شوند.</string>
+    <string name="converting_background_hint">می‌توانید از اپ خارج شوید؛ تبدیل روی سرور ادامه پیدا می‌کند و با بازگشت، همچنان اینجاست.</string>
+    <string name="page_progress">صفحه‌ی %1$d از %2$d</string>
+    <string name="resuming_job">در حالِ ادامه‌ی تبدیلی که قبلاً شروع شده بود…</string>
 </resources>

@@ -24,6 +24,7 @@ data class OcrOptions(
     val verify: Boolean = true,
     val normalize: Boolean = true,
     val pageNumbers: Boolean = true,
+    val stripHeaders: Boolean = true,
     val passes: Int = 2,
 )
 
@@ -37,9 +38,21 @@ data class OcrResult(
     val log: List<String>,
 )
 
-sealed class OcrOutcome {
-    data class Success(val result: OcrResult) : OcrOutcome()
-    data class Failure(val reason: String) : OcrOutcome()
+/** A conversion runs on the server as a background job — a large document can
+ * take far longer than any one HTTP request should stay open, especially from
+ * a phone that may lock its screen or lose Wi-Fi mid-upload. Submitting hands
+ * back a [JobHandle] immediately; the actual OCR is tracked by polling. */
+data class JobHandle(val jobId: String)
+
+sealed class SubmitOutcome {
+    data class Submitted(val job: JobHandle) : SubmitOutcome()
+    data class Failure(val reason: String) : SubmitOutcome()
+}
+
+sealed class JobStatus {
+    data class Running(val pagesDone: Int, val pagesTotal: Int?, val lastLogLine: String?) : JobStatus()
+    data class Done(val result: OcrResult) : JobStatus()
+    data class Failed(val reason: String) : JobStatus()
 }
 
 sealed class ConnectionCheck {
@@ -54,7 +67,10 @@ sealed class ConnectionCheck {
  */
 object OcrClient {
 
-    private const val READ_TIMEOUT_MS = 6 * 60 * 1000 // verification legitimately takes minutes
+    // Submitting and polling are both meant to return quickly — the actual
+    // OCR work happens on the server between polls, not inside either call.
+    private const val SUBMIT_READ_TIMEOUT_MS = 60 * 1000
+    private const val POLL_READ_TIMEOUT_MS = 20 * 1000
     private const val CONNECT_TIMEOUT_MS = 15 * 1000
 
     fun normalizeBaseUrl(input: String): String? {
@@ -93,9 +109,9 @@ object OcrClient {
         }
     }
 
-    /** Blocking call — run this off the main thread. */
-    fun convert(baseUrl: String, files: List<UploadFile>, options: OcrOptions): OcrOutcome {
-        if (files.isEmpty()) return OcrOutcome.Failure("no files to send")
+    /** Uploads the files and starts the job. Blocking — run off the main thread. */
+    fun submit(baseUrl: String, files: List<UploadFile>, options: OcrOptions): SubmitOutcome {
+        if (files.isEmpty()) return SubmitOutcome.Failure("no files to send")
 
         val boundary = "PersianOcr-${UUID.randomUUID()}"
         var connection: HttpURLConnection? = null
@@ -104,7 +120,7 @@ object OcrClient {
                 requestMethod = "POST"
                 doOutput = true
                 connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
+                readTimeout = SUBMIT_READ_TIMEOUT_MS
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                 setChunkedStreamingMode(64 * 1024)
             }
@@ -113,6 +129,7 @@ object OcrClient {
                 writeField(out, boundary, "verify", if (options.verify) "1" else "0")
                 writeField(out, boundary, "normalize", if (options.normalize) "1" else "0")
                 writeField(out, boundary, "page_numbers", if (options.pageNumbers) "1" else "0")
+                writeField(out, boundary, "strip_headers", if (options.stripHeaders) "1" else "0")
                 writeField(out, boundary, "passes", options.passes.toString())
                 for (file in files) {
                     writeFilePart(out, boundary, file)
@@ -122,27 +139,73 @@ object OcrClient {
             }
 
             val code = connection.responseCode
-            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
-                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-
+            val body = readBody(connection, code)
             if (code !in 200..299) {
-                val serverMessage = runCatching { JSONObject(body).optString("error") }.getOrNull()
-                return OcrOutcome.Failure(
-                    if (!serverMessage.isNullOrBlank()) serverMessage else "server returned HTTP $code"
-                )
+                return SubmitOutcome.Failure(errorMessageFrom(body, code))
             }
-            OcrOutcome.Success(parseResult(body))
+            SubmitOutcome.Submitted(JobHandle(JSONObject(body).getString("job_id")))
         } catch (e: SocketTimeoutException) {
-            OcrOutcome.Failure("timed out waiting for the server — try fewer passes or turn verification off")
+            SubmitOutcome.Failure("timed out uploading — check the connection and try again")
         } catch (e: UnknownHostException) {
-            OcrOutcome.Failure("could not resolve that address")
+            SubmitOutcome.Failure("could not resolve that address")
         } catch (e: SSLException) {
-            OcrOutcome.Failure("TLS error: ${e.message}")
+            SubmitOutcome.Failure("TLS error: ${e.message}")
         } catch (e: Exception) {
-            OcrOutcome.Failure("${e.javaClass.simpleName}: ${e.message}")
+            SubmitOutcome.Failure("${e.javaClass.simpleName}: ${e.message}")
         } finally {
             connection?.disconnect()
         }
+    }
+
+    /** Checks a job's current state once. Blocking — run off the main thread. */
+    fun poll(baseUrl: String, job: JobHandle): JobStatus {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL("$baseUrl/jobs/${job.jobId}").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = POLL_READ_TIMEOUT_MS
+            }
+            val code = connection.responseCode
+            val body = readBody(connection, code)
+            if (code !in 200..299) {
+                return JobStatus.Failed(errorMessageFrom(body, code))
+            }
+
+            val json = JSONObject(body)
+            when (json.optString("status")) {
+                "done" -> JobStatus.Done(parseResult(json.getJSONObject("result")))
+                "error" -> JobStatus.Failed(json.optString("error").ifBlank { "the server reported an error" })
+                else -> {
+                    val log = json.optJSONArray("log")
+                    val lastLine = if (log != null && log.length() > 0) log.getString(log.length() - 1) else null
+                    JobStatus.Running(
+                        pagesDone = json.optInt("pages_done", 0),
+                        pagesTotal = if (json.isNull("pages_total")) null else json.optInt("pages_total"),
+                        lastLogLine = lastLine,
+                    )
+                }
+            }
+        } catch (e: SocketTimeoutException) {
+            JobStatus.Failed("timed out checking progress — will retry")
+        } catch (e: UnknownHostException) {
+            JobStatus.Failed("could not resolve that address")
+        } catch (e: SSLException) {
+            JobStatus.Failed("TLS error: ${e.message}")
+        } catch (e: Exception) {
+            JobStatus.Failed("${e.javaClass.simpleName}: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun readBody(connection: HttpURLConnection, code: Int): String =
+        (if (code in 200..299) connection.inputStream else connection.errorStream)
+            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+
+    private fun errorMessageFrom(body: String, code: Int): String {
+        val serverMessage = runCatching { JSONObject(body).optString("error") }.getOrNull()
+        return if (!serverMessage.isNullOrBlank()) serverMessage else "server returned HTTP $code"
     }
 
     private fun writeField(out: OutputStream, boundary: String, name: String, value: String) {
@@ -163,8 +226,7 @@ object OcrClient {
         out.write("\r\n".toByteArray(Charsets.UTF_8))
     }
 
-    private fun parseResult(body: String): OcrResult {
-        val json = JSONObject(body)
+    private fun parseResult(json: JSONObject): OcrResult {
         val lowConfidence = json.optJSONArray("low_confidence_pages")?.let { array ->
             (0 until array.length()).map { array.getInt(it) }
         } ?: emptyList()

@@ -77,6 +77,9 @@ def _add_text_arguments(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--no-page-numbers", action="store_true", help="drop printed page numbers from the output")
     group.add_argument("--no-join-pages", action="store_true",
                        help="do not rejoin a paragraph split across a page break")
+    group.add_argument("--strip-headers-footers", action="store_true",
+                       help="drop running headers/footers/watermark lines that repeat "
+                            "at the top or bottom of enough pages")
 
 
 def _settings_from_args(args: argparse.Namespace) -> Settings:
@@ -109,6 +112,7 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         persian_punctuation=not args.latin_punctuation,
         keep_page_numbers=not args.no_page_numbers,
         join_pages=not args.no_join_pages,
+        strip_repeated_boundaries=args.strip_headers_footers,
         workers=args.workers,
         cache_dir=Path(args.cache_dir) if args.cache_dir else None,
         use_cache=not args.no_cache,

@@ -3,6 +3,14 @@
 Deliberately built on the standard library only — no Flask, no bundler, no
 build step. It binds to localhost by default because it processes local files
 and can spend money on API calls; it is a personal tool, not a service.
+
+Conversion runs as a background job rather than inside the HTTP request: a
+100-page document can take well over an hour, and holding one connection
+open that long is fragile — a phone locking its screen, a laptop sleeping,
+or a flaky Wi-Fi hop all kill an in-flight request and lose the whole run.
+``POST /convert`` hands back a job id immediately; the caller polls
+``GET /jobs/<id>`` for progress and, eventually, the result. The job keeps
+running on the server even if nobody is listening.
 """
 
 from __future__ import annotations
@@ -13,16 +21,27 @@ import re
 import shutil
 import tempfile
 import threading
+import time
+import uuid
 import webbrowser
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .config import Settings
 from .ingest import SUPPORTED_SUFFIXES
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+
+#: How long a finished job's result stays available for polling before it is
+#: swept away. Generous, since a phone that lost signal mid-job needs to be
+#: able to come back later and still find the answer.
+JOB_TTL_SECONDS = 6 * 3600
+
+_PAGE_TOTAL_RE = re.compile(r"loaded (\d+) page\(s\)")
+_PAGE_DONE_RE = re.compile(r"^page (\d+) done \(")
 
 
 def parse_multipart(body: bytes, boundary: bytes) -> Tuple[List[Tuple[str, bytes]], Dict[str, str]]:
@@ -63,6 +82,97 @@ def parse_multipart(body: bytes, boundary: bytes) -> Tuple[List[Tuple[str, bytes
         else:
             fields[name_match.group(1)] = content.decode("utf-8", "replace")
     return files, fields
+
+
+# -- background jobs --------------------------------------------------------
+@dataclass
+class Job:
+    id: str
+    status: str = "queued"  # queued | running | done | error
+    log: List[str] = field(default_factory=list)
+    pages_total: Optional[int] = None
+    pages_done: int = 0
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: float = field(default_factory=time.time)
+    finished_at: Optional[float] = None
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "status": self.status,
+            "pages_total": self.pages_total,
+            "pages_done": self.pages_done,
+            "log": list(self.log[-200:]),
+            "result": self.result,
+            "error": self.error,
+        }
+
+    def note(self, message: str) -> None:
+        self.log.append(message)
+        if self.pages_total is None:
+            total_match = _PAGE_TOTAL_RE.search(message)
+            if total_match:
+                self.pages_total = int(total_match.group(1))
+        if _PAGE_DONE_RE.match(message):
+            self.pages_done += 1
+
+
+class JobStore:
+    """Every job the server has run recently, keyed by id."""
+
+    def __init__(self) -> None:
+        self._jobs: Dict[str, Job] = {}
+        self._lock = threading.Lock()
+
+    def create(self) -> Job:
+        job = Job(id=uuid.uuid4().hex)
+        with self._lock:
+            self._sweep_locked()
+            self._jobs[job.id] = job
+        return job
+
+    def get(self, job_id: str) -> Optional[Job]:
+        with self._lock:
+            return self._jobs.get(job_id)
+
+    def _sweep_locked(self) -> None:
+        cutoff = time.time() - JOB_TTL_SECONDS
+        expired = [
+            job_id
+            for job_id, job in self._jobs.items()
+            if job.finished_at is not None and job.finished_at < cutoff
+        ]
+        for job_id in expired:
+            del self._jobs[job_id]
+
+
+JOBS = JobStore()
+
+
+def _run_job(job: Job, settings: Settings, paths: List[Path], workdir: Path) -> None:
+    job.status = "running"
+    try:
+        from .pipeline import Pipeline
+
+        pipeline = Pipeline(settings, progress=job.note)
+        result = pipeline.run(paths)
+        corrections = sum(1 for page in result.pages for c in page.corrections if c.get("applied"))
+        job.result = {
+            "text": result.text,
+            "confidence": round(result.confidence, 4),
+            "words": result.stats.get("words", 0),
+            "pages": result.stats.get("pages", 0),
+            "corrections": corrections,
+            "low_confidence_pages": [p.index + 1 for p in result.low_confidence_pages()],
+            "log": list(job.log) + result.warnings,
+        }
+        job.status = "done"
+    except Exception as exc:  # noqa: BLE001 — reported to the caller, not raised
+        job.error = str(exc)
+        job.status = "error"
+    finally:
+        job.finished_at = time.time()
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 PAGE = """<!doctype html>
@@ -107,6 +217,9 @@ PAGE = """<!doctype html>
   .log {{ font-family: ui-monospace, monospace; font-size: .8rem; color: var(--muted);
           white-space: pre-wrap; max-height: 12rem; overflow: auto; direction: ltr; text-align: left; }}
   .hidden {{ display: none; }}
+  .progress {{ height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: .5rem; }}
+  .progress > div {{ height: 100%; background: var(--accent); width: 0%; transition: width .3s; }}
+  .progress-label {{ font-size: .85rem; color: var(--muted); margin-top: .35rem; }}
 </style>
 </head>
 <body>
@@ -124,11 +237,14 @@ PAGE = """<!doctype html>
       <label class="opt"><input type="checkbox" id="verify" checked> وارسیِ خودکارِ نتیجه</label>
       <label class="opt"><input type="checkbox" id="normalize" checked> یکدست‌سازیِ نویسه‌های فارسی</label>
       <label class="opt"><input type="checkbox" id="pagenums" checked> نگه‌داشتنِ شماره‌ی صفحه</label>
+      <label class="opt"><input type="checkbox" id="stripheaders"> حذفِ سربرگ/پابرگ/واترمارکِ تکراری</label>
       <label class="opt">پاس‌ها:
         <select id="passes"><option>1</option><option selected>2</option><option>3</option></select>
       </label>
       <button id="run" disabled>تبدیل کن</button>
     </div>
+    <div class="progress hidden" id="progressBar"><div id="progressFill"></div></div>
+    <div class="progress-label hidden" id="progressLabel"></div>
   </div>
 
   <div class="card hidden" id="result">
@@ -147,6 +263,9 @@ PAGE = """<!doctype html>
 const picker = document.getElementById('picker');
 const drop = document.getElementById('drop');
 const runButton = document.getElementById('run');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
 let chosen = [];
 
 function setFiles(list) {{
@@ -165,20 +284,49 @@ picker.addEventListener('change', e => setFiles(e.target.files));
 }}));
 drop.addEventListener('drop', e => setFiles(e.dataTransfer.files));
 
+function sleep(ms) {{ return new Promise(r => setTimeout(r, ms)); }}
+
+async function pollJob(jobId) {{
+  while (true) {{
+    const response = await fetch('/jobs/' + jobId);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'خطا');
+
+    if (data.pages_total) {{
+      const pct = Math.min(100, Math.round(100 * data.pages_done / data.pages_total));
+      progressFill.style.width = pct + '%';
+      progressLabel.textContent = 'صفحه‌ی ' + data.pages_done + ' از ' + data.pages_total;
+    }} else {{
+      progressLabel.textContent = (data.log[data.log.length - 1]) || 'در حالِ آماده‌سازی…';
+    }}
+
+    if (data.status === 'done') return data.result;
+    if (data.status === 'error') throw new Error(data.error || 'خطا');
+    await sleep(2000);
+  }}
+}}
+
 runButton.addEventListener('click', async () => {{
   runButton.disabled = true;
   const original = runButton.textContent;
-  runButton.textContent = 'در حالِ خواندن…';
+  runButton.textContent = 'در حالِ ارسال…';
+  progressBar.classList.remove('hidden');
+  progressLabel.classList.remove('hidden');
+  progressFill.style.width = '0%';
   const form = new FormData();
   chosen.forEach(file => form.append('files', file));
   form.append('verify', document.getElementById('verify').checked ? '1' : '0');
   form.append('normalize', document.getElementById('normalize').checked ? '1' : '0');
   form.append('page_numbers', document.getElementById('pagenums').checked ? '1' : '0');
+  form.append('strip_headers', document.getElementById('stripheaders').checked ? '1' : '0');
   form.append('passes', document.getElementById('passes').value);
   try {{
-    const response = await fetch('/convert', {{ method: 'POST', body: form }});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'خطا');
+    const submit = await fetch('/convert', {{ method: 'POST', body: form }});
+    const submitData = await submit.json();
+    if (!submit.ok) throw new Error(submitData.error || 'خطا');
+    runButton.textContent = 'در حالِ خواندن…';
+    const data = await pollJob(submitData.job_id);
+
     document.getElementById('result').classList.remove('hidden');
     document.getElementById('text').value = data.text;
     const percent = (data.confidence * 100).toFixed(1);
@@ -196,6 +344,8 @@ runButton.addEventListener('click', async () => {{
   }} finally {{
     runButton.disabled = false;
     runButton.textContent = original;
+    progressBar.classList.add('hidden');
+    progressLabel.classList.add('hidden');
   }}
 }});
 
@@ -232,11 +382,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_json(self, status: int, payload: Dict[str, Any]) -> None:
+        self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                   "application/json; charset=utf-8")
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/", "/index.html"):
             self._send(200, PAGE.format(version=__version__).encode("utf-8"), "text/html; charset=utf-8")
-        else:
-            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
+        if self.path.startswith("/jobs/"):
+            job_id = self.path[len("/jobs/") :]
+            job = JOBS.get(job_id)
+            if job is None:
+                self._error(404, "no such job (it may have expired)")
+                return
+            self._send_json(200, job.snapshot())
+            return
+        self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/convert":
@@ -259,7 +421,6 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, "no supported files were uploaded")
             return
 
-        log: List[str] = []
         workdir = Path(tempfile.mkdtemp(prefix="persian-ocr-"))
         try:
             paths = []
@@ -272,39 +433,22 @@ class Handler(BaseHTTPRequestHandler):
                 verify=fields.get("verify", "1") == "1",
                 normalize=fields.get("normalize", "1") == "1",
                 keep_page_numbers=fields.get("page_numbers", "1") == "1",
+                strip_repeated_boundaries=fields.get("strip_headers", "0") == "1",
                 passes=max(1, min(3, int(fields.get("passes", "2") or 2))),
                 cache_dir=workdir / "cache",
             )
-
-            from .pipeline import Pipeline
-
-            pipeline = Pipeline(settings, progress=log.append)
-            result = pipeline.run(paths)
-            corrections = sum(
-                1 for page in result.pages for c in page.corrections if c.get("applied")
-            )
-            payload = {
-                "text": result.text,
-                "confidence": round(result.confidence, 4),
-                "words": result.stats.get("words", 0),
-                "pages": result.stats.get("pages", 0),
-                "corrections": corrections,
-                "low_confidence_pages": [p.index + 1 for p in result.low_confidence_pages()],
-                "log": log + result.warnings,
-            }
-            self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                       "application/json; charset=utf-8")
         except Exception as exc:  # noqa: BLE001
-            self._error(500, str(exc))
-        finally:
             shutil.rmtree(workdir, ignore_errors=True)
+            self._error(400, f"bad request: {exc}")
+            return
+
+        job = JOBS.create()
+        thread = threading.Thread(target=_run_job, args=(job, settings, paths, workdir), daemon=True)
+        thread.start()
+        self._send_json(202, {"job_id": job.id})
 
     def _error(self, status: int, message: str) -> None:
-        self._send(
-            status,
-            json.dumps({"error": html.escape(message)}, ensure_ascii=False).encode("utf-8"),
-            "application/json; charset=utf-8",
-        )
+        self._send_json(status, {"error": html.escape(message)})
 
 
 def serve(settings: Settings, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False) -> None:

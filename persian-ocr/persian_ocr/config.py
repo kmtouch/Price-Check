@@ -84,6 +84,7 @@ class Settings:
     keep_page_numbers: bool = True
     page_separator: str = "\n\n"
     join_pages: bool = True       # stitch a paragraph split across a page break
+    strip_repeated_boundaries: bool = False  # drop running headers/footers/watermarks
 
     # --- plumbing ----------------------------------------------------------
     workers: int = 4

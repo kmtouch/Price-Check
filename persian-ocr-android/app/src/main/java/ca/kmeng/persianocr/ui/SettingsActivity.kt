@@ -29,6 +29,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.verifySwitch.isChecked = options.verify
         binding.normalizeSwitch.isChecked = options.normalize
         binding.pageNumbersSwitch.isChecked = options.pageNumbers
+        binding.stripHeadersSwitch.isChecked = options.stripHeaders
         when (options.passes) {
             1 -> binding.passes1.isChecked = true
             3 -> binding.passes3.isChecked = true
@@ -85,6 +86,7 @@ class SettingsActivity : AppCompatActivity() {
                 verify = binding.verifySwitch.isChecked,
                 normalize = binding.normalizeSwitch.isChecked,
                 pageNumbers = binding.pageNumbersSwitch.isChecked,
+                stripHeaders = binding.stripHeadersSwitch.isChecked,
                 passes = selectedPasses(),
             )
         )
