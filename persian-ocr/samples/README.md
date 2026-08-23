@@ -22,3 +22,31 @@ Conventions in the reference files:
   intentional and must survive a conversion.
 * Page numbers printed on the page (`۴`, `۵`) are kept on their own line, which
   is what `--page-numbers` (the default) produces.
+
+## `output/` — a worked example
+
+Two runs over the three pages above, produced by the real pipeline with the
+engine replaying a recorded reading instead of calling the API (the sandbox
+this was built in had no API key). Everything after the reading — consensus,
+checks, verification, vetting, normalisation, assembly, reporting — is the
+actual code doing the actual work.
+
+| File | What it shows |
+|---|---|
+| `nietzsche-3-pages.txt` | the converted text of all three pages |
+| `nietzsche-3-pages.report.md` | the run report for a clean read |
+| `demo-error-recovery.txt` | byte-identical to the file above |
+| `demo-error-recovery.report.md` | the same run with six typical OCR faults injected into the reading |
+
+The second run is the interesting one. Injected into the reading were three
+dot confusions (`دستغیت`, `می‌گیرذ`, `زیباروبان`), a fourth on the next page
+(`پرسنیده‌اند`), a leaked toolbar label (`Edit PDF`), and — from the verifier
+— one suggestion that improves the *style* rather than matching the image
+(`این گونه واژه‌ها و عبارت‌ها و جمله‌ها` → `این‌گونه واژگان و عبارات و جملات`).
+
+The five reading faults were corrected; the style rewrite was refused, with the
+reason recorded in the report. The output is byte-identical to the clean run.
+
+Because the reading is replayed, the 100% benchmark score of this demo says
+nothing about the tool's accuracy against the live API — it measures the rest
+of the pipeline. Run it with your own key to get a real number.

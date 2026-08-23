@@ -116,11 +116,18 @@ def merge_tiles(tile_blocks: Sequence[Sequence[Block]], join_cut_paragraphs: boo
     return merged
 
 
+def page_numbers_in(blocks: Sequence[Block]) -> List[str]:
+    """Every page number printed on the page, in order.
+
+    Usually one; two when the image spans a page break, which is the normal
+    shape of a screenshot taken while scrolling.
+    """
+    return [b.text.strip() for b in blocks if b.type == "page_number" and b.text.strip()]
+
+
 def _page_number_from_blocks(blocks: Sequence[Block]) -> Optional[str]:
-    for block in blocks:
-        if block.type == "page_number" and block.text.strip():
-            return block.text.strip()
-    return None
+    numbers = page_numbers_in(blocks)
+    return numbers[0] if numbers else None
 
 
 def render_document(
@@ -131,7 +138,14 @@ def render_document(
     keep_footnotes: bool = True,
     page_separator: str = "\n\n",
 ) -> str:
-    """Turn assembled pages into the final plain-text document."""
+    """Turn assembled pages into the final plain-text document.
+
+    Printed page numbers stay where the page printed them. That matters for
+    the common case of a screenshot or scan that spans a page break and so
+    carries two of them: the number closing the previous page and the number
+    closing this one. Hoisting them to a fixed position would silently drop
+    one of the two and put the other in the wrong place.
+    """
     chunks: List[str] = []
     for page in pages:
         body: List[str] = []
@@ -141,24 +155,20 @@ def render_document(
             if not text:
                 continue
             if block.type == "page_number":
-                continue
-            if block.type == "footnote":
+                if page_marks == "none":
+                    continue
+                body.append(text if page_marks == "number" else f"[صفحهٔ {text}]")
+            elif block.type == "footnote":
                 footnotes.append(text)
             else:
                 body.append(text)
 
-        if page_marks != "none":
-            page.page_number = page.page_number or _page_number_from_blocks(page.blocks)
+        page.page_number = page.page_number or _page_number_from_blocks(page.blocks)
 
         if keep_footnotes and footnotes:
             body.append("\n".join(footnotes))
 
         page_text = "\n\n".join(body).strip()
-
-        if page_marks != "none" and page.page_number:
-            mark = page.page_number if page_marks == "number" else f"[صفحهٔ {page.page_number}]"
-            page_text = f"{page_text}\n\n{mark}" if page_text else mark
-
         if not page_text:
             continue
 

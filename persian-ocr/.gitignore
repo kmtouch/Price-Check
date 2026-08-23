@@ -7,3 +7,6 @@ dist/
 *.cache/
 *.report.json
 *.report.md
+# the checked-in demo run is documentation, not run output
+!samples/output/*.report.json
+!samples/output/*.report.md

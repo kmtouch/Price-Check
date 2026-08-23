@@ -141,3 +141,47 @@ def test_confidence_is_penalised_by_structural_problems():
     assert confidence_score(structural_problems=0, **kwargs) > confidence_score(
         structural_problems=3, **kwargs
     )
+
+
+def test_a_fluency_rewrite_is_refused_even_when_the_words_look_alike():
+    # Persian synonyms share their stems, so character similarity alone lets
+    # this through; counting whole changed words is what catches it.
+    original = "این گونه واژه‌ها و عبارت‌ها و جمله‌ها"
+    _, processed = apply_corrections(
+        [block(original)],
+        [Correction(0, original, "این‌گونه واژگان و عبارات و جملات", "reads more fluently", 0.99)],
+    )
+    assert not processed[0].applied
+    assert "rewrite" in processed[0].rejected_because
+
+
+def test_a_two_word_reading_fix_is_still_allowed():
+    blocks = [block("در طولِ هزاره‌ها به آن‌ها باور داشته‌اند")]
+    updated, processed = apply_corrections(
+        blocks, [Correction(0, "هزاره‌ها به", "هزاره‌ها یه", "the page shows a dotless beh", 0.9)]
+    )
+    assert processed[0].applied
+
+
+def test_an_encoding_only_fix_is_allowed_at_any_size():
+    original = "كتاب ايشان در سال ٢٠٢٥ چاپ شد"
+    corrected = "کتاب ایشان در سال ۲۰۲۵ چاپ شد"
+    _, processed = apply_corrections([block(original)], [Correction(0, original, corrected, "", 0.9)])
+    assert processed[0].applied
+
+
+def test_changed_words_counts_whole_words():
+    from persian_ocr.verify import changed_words
+
+    assert changed_words("این کتاب است", "این کتاٮ است") == 1
+    assert changed_words("واژه‌ها و عبارت‌ها و جمله‌ها", "واژگان و عبارات و جملات") == 3
+
+
+def test_a_correction_repeated_in_a_later_round_is_dropped_quietly():
+    blocks = [block("این کتاب خوب است")]
+    _, processed = apply_corrections(
+        blocks,
+        [Correction(0, "کتاٮ", "کتاب", "dots", 0.96)],
+        already_applied=[("کتاٮ", "کتاب")],
+    )
+    assert processed == []

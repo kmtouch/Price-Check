@@ -74,6 +74,7 @@ class Settings:
     verify_rounds: int = 2
     min_correction_confidence: float = 0.75
     max_correction_drift: float = 0.4   # reject wholesale rewrites
+    max_changed_words: int = 2          # a fix touches a word or two, not a clause
     lexicon_paths: Sequence[Path] = field(default_factory=tuple)
 
     # --- text shaping ------------------------------------------------------

@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
+from .assemble import page_numbers_in
 from .pipeline import RunResult
 
 # Rough Claude API list prices, USD per million tokens, for the cost estimate.
@@ -76,7 +77,9 @@ def build_report(result: RunResult, output_path: Path) -> Dict:
             {
                 "index": page.index + 1,
                 "source": page.label,
-                "printed_page_number": page.page_number,
+                "printed_page_numbers": page_numbers_in(page.blocks) or (
+                    [page.page_number] if page.page_number else []
+                ),
                 "confidence": round(page.confidence, 4),
                 "cross_pass_agreement": round(page.agreement, 4),
                 "legibility": page.legibility,
@@ -134,7 +137,7 @@ def render_markdown(report: Dict) -> str:
     for page in report.get("pages", []):
         applied = sum(1 for c in page.get("corrections", []) if c.get("applied"))
         add(
-            f"| {page['index']} | {page['source']} | {page.get('printed_page_number') or '—'} | "
+            f"| {page['index']} | {page['source']} | {'، '.join(page.get('printed_page_numbers') or []) or '—'} | "
             f"{page['confidence'] * 100:.1f}٪ | {page['cross_pass_agreement'] * 100:.1f}٪ | "
             f"{applied} | {len(page.get('open_flags', []))} |"
         )

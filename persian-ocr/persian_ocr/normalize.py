@@ -27,6 +27,9 @@ from typing import Dict, Optional, Tuple
 
 ZWNJ = "‌"
 
+#: What the engines write where the page is genuinely unreadable.
+UNREADABLE = "⟨؟⟩"
+
 # Characters that carry no meaning here and only break comparisons.
 INVISIBLES = "​‍‎‏‪‫‬‭‮⁦⁧⁨⁩﻿­"
 
@@ -218,14 +221,23 @@ class Normalizer:
         if not self.options.fix_spacing:
             return text
         text = re.sub(r"[ \t]+", " ", text)
+        # The unreadable marker is a single atom: no rule may split it.
+        text = text.replace(UNREADABLE, "\x01")
         # No space before closing punctuation; exactly one after it.
         text = re.sub(rf"\s+([{re.escape(CLOSE_PUNCT)}])", r"\1", text)
-        text = re.sub(rf"([{re.escape(CLOSE_PUNCT)}])(?=[^\s{re.escape(CLOSE_PUNCT + CLOSE_BRACKETS)}])", r"\1 ", text)
+        text = re.sub(
+            rf"([{re.escape(CLOSE_PUNCT)}])(?=[^\s\x01{re.escape(CLOSE_PUNCT + CLOSE_BRACKETS)}])",
+            r"\1 ",
+            text,
+        )
         # Brackets hug their contents.
-        text = re.sub(rf"([{re.escape(OPEN_BRACKETS)}])\s+", r"\1", text)
-        text = re.sub(rf"\s+([{re.escape(CLOSE_BRACKETS)}])", r"\1", text)
+        text = re.sub(rf"([{re.escape(OPEN_BRACKETS)}])[ \t]+", r"\1", text)
+        text = re.sub(rf"[ \t]+([{re.escape(CLOSE_BRACKETS)}])", r"\1", text)
         text = re.sub(rf"([{re.escape(CLOSE_BRACKETS)}])(?=[{PERSIAN_LETTERS}])", r"\1 ", text)
-        text = re.sub(rf"([{PERSIAN_LETTERS}])(?=[{re.escape(OPEN_BRACKETS)}])", r"\1 ", text)
+        # Deliberately no rule inserting a space *before* an opening bracket:
+        # a footnote marker attached to its word — واگنر(۸) — is set exactly
+        # like that in print, and pushing it away would be a change, not a fix.
+        text = text.replace("\x01", UNREADABLE)
         text = re.sub(r" *\n *", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()

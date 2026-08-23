@@ -104,3 +104,17 @@ def test_fold_for_compare_ignores_encoding_choices():
 def test_change_report_names_the_rules_that_fired():
     _, changes = Normalizer().apply("كتاب ٢٠٢٥ , تست")
     assert set(changes) >= {"letters", "digits", "punctuation"}
+
+
+def test_a_footnote_marker_stays_attached_to_its_word():
+    # واگنر(۸) is set exactly like that in print; pushing the bracket away
+    # would be a change, not a fix.
+    assert normalize("داستانِ واگنر(۸) آغاز کرد") == "داستانِ واگنر(۸) آغاز کرد"
+
+
+def test_brackets_still_hug_their_contents():
+    assert normalize("کتاب ( چاپ دوم ) بود") == "کتاب (چاپ دوم) بود"
+
+
+def test_the_unreadable_marker_is_never_split():
+    assert normalize("نیچه ⟨؟⟩ای را به اوج می‌رساند") == "نیچه ⟨؟⟩ای را به اوج می‌رساند"

@@ -66,6 +66,8 @@ def _add_text_arguments(parser: argparse.ArgumentParser) -> None:
                        help="reject corrections the verifier is less sure of (default: 0.75)")
     group.add_argument("--max-drift", type=float, default=0.4,
                        help="reject corrections that rewrite more than this fraction of a span")
+    group.add_argument("--max-changed-words", type=int, default=2,
+                       help="reject a correction touching more whole words than this (default: 2)")
     group.add_argument("--dictionary", action="append", default=[], metavar="PATH",
                        help="extra word list (plain text or hunspell .dic); repeatable")
     group.add_argument("--no-normalize", action="store_true", help="keep the raw characters as read")
@@ -99,6 +101,7 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         verify_rounds=args.verify_rounds,
         min_correction_confidence=args.min_confidence,
         max_correction_drift=args.max_drift,
+        max_changed_words=args.max_changed_words,
         lexicon_paths=tuple(Path(p) for p in args.dictionary),
         normalize=not args.no_normalize,
         persian_digits=not args.latin_digits,

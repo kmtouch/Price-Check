@@ -88,3 +88,24 @@ def test_paragraph_stats_counts_what_it_says():
     stats = paragraph_stats("یک دو\n\nسه چهار پنج\n")
     assert stats["words"] == 5
     assert stats["paragraphs"] == 2
+
+
+def test_two_page_numbers_on_one_image_both_survive():
+    # A screenshot spanning a page break carries the number closing the
+    # previous page and the one closing this page; both are printed, in place.
+    page = PageResult(
+        0,
+        "spread.jpg",
+        blocks("پایانِ صفحه‌ی پیشین")
+        + blocks("۴", kind="page_number")
+        + blocks("آغازِ صفحه‌ی تازه")
+        + blocks("۵", kind="page_number"),
+    )
+    assert render_document([page]) == (
+        "پایانِ صفحه‌ی پیشین\n\n۴\n\nآغازِ صفحه‌ی تازه\n\n۵\n"
+    )
+
+
+def test_page_numbers_keep_their_place_not_the_page_end():
+    page = PageResult(0, "p", blocks("۴", kind="page_number") + blocks("متنِ صفحه"))
+    assert render_document([page]) == "۴\n\nمتنِ صفحه\n"

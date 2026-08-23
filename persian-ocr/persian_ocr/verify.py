@@ -140,12 +140,33 @@ def _drift(original: str, corrected: str) -> float:
     ).ratio()
 
 
+def changed_words(original: str, corrected: str) -> int:
+    """How many whole words a correction touches.
+
+    This is the signal that separates a reading fix from a rewrite. Fixing a
+    misread letter changes characters *inside* one or two words; swapping
+    واژه‌ها for واژگان and عبارت‌ها for عبارات is a different kind of edit
+    entirely — it substitutes lexical items, which is editing the book, not
+    transcribing it. Character-level similarity cannot tell the two apart,
+    because Persian synonyms share their stems.
+    """
+    before = fold_for_compare(original).split()
+    after = fold_for_compare(corrected).split()
+    matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
+    return sum(
+        max(i2 - i1, j2 - j1)
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes()
+        if tag != "equal"
+    )
+
+
 def vet_correction(
     correction: Correction,
     blocks: Sequence[Block],
     *,
     min_confidence: float,
     max_drift: float,
+    max_changed_words: int = 2,
 ) -> Optional[str]:
     """Return the reason to reject a correction, or None to accept it."""
     if correction.confidence < min_confidence:
@@ -172,6 +193,15 @@ def vet_correction(
         return None
 
     drift = _drift(correction.original, correction.corrected)
+    if drift == 0.0:
+        # The two forms are the same text differently encoded (half-space,
+        # digit family, Arabic look-alike): a spelling fix, whatever its size.
+        return None
+    touched = changed_words(correction.original, correction.corrected)
+    if touched > max_changed_words:
+        return (
+            f"changes {touched} whole words — that is a rewrite, not a targeted fix"
+        )
     if drift > max_drift and len(correction.original) > 12:
         return f"rewrites too much of the span (drift {drift:.2f} > {max_drift:.2f})"
     length_ratio = len(correction.corrected) / max(1, len(correction.original))
@@ -186,13 +216,24 @@ def apply_corrections(
     *,
     min_confidence: float = 0.75,
     max_drift: float = 0.4,
+    max_changed_words: int = 2,
+    already_applied: Sequence[Tuple[str, str]] = (),
 ) -> Tuple[List[Block], List[Correction]]:
-    """Apply the corrections that survive vetting; record why the rest did not."""
+    """Apply the corrections that survive vetting; record why the rest did not.
+
+    `already_applied` lists (original, corrected) pairs from earlier rounds, so
+    a re-proposed fix is dropped quietly instead of being logged as a rejection
+    for a span that no longer exists.
+    """
     updated = [Block(block.type, block.text) for block in blocks]
     processed: List[Correction] = []
+    seen = {(original, corrected) for original, corrected in already_applied}
     for correction in corrections:
+        if (correction.original, correction.corrected) in seen:
+            continue
         reason = vet_correction(
-            correction, updated, min_confidence=min_confidence, max_drift=max_drift
+            correction, updated, min_confidence=min_confidence, max_drift=max_drift,
+            max_changed_words=max_changed_words,
         )
         if reason is not None:
             correction.rejected_because = reason

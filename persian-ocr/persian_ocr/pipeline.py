@@ -245,6 +245,10 @@ class Pipeline:
                 corrections,
                 min_confidence=self.settings.min_correction_confidence,
                 max_drift=self.settings.max_correction_drift,
+                max_changed_words=self.settings.max_changed_words,
+                already_applied=[
+                    (c.original, c.corrected) for c in all_corrections if c.applied
+                ],
             )
             result.blocks, added = apply_missing_text(
                 result.blocks, payload, self.settings.min_correction_confidence

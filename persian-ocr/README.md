@@ -107,9 +107,13 @@ The tool refuses to improve the text. Concretely:
   own digits: `Dämmerung, 1889` does not become `Dämmerung، ۱۸۸۹`.
 * **Unreadable is unreadable.** A span hidden behind a watermark or a floating
   button is transcribed as `⟨؟⟩` and reported, never guessed.
-* **Corrections are bounded.** A proposed fix that rewrites more than 40% of a
-  span, changes its length by more than 2.5×, quotes text that is not in the
-  document, or falls below the confidence floor is rejected and logged.
+* **Corrections are bounded.** A proposed fix is rejected and logged if it
+  quotes text that is not in the document, falls below the confidence floor,
+  changes its span's length by more than 2.5×, rewrites more than 40% of it, or
+  touches more than two whole words. That last rule is the one that matters:
+  Persian synonyms share their stems, so a fluency rewrite
+  (`واژه‌ها` → `واژگان`, `عبارت‌ها` → `عبارات`) looks similar character by
+  character and only shows up when whole changed words are counted.
 
 ## Commands
 
@@ -129,6 +133,7 @@ persian-ocr serve --open                    # local browser UI
 | `--no-verify` | skip the re-read stage — faster and cheaper, and noticeably less accurate |
 | `--verify-rounds N` | how many correction rounds to run (default 2, stops early when clean) |
 | `--min-confidence` | the floor a correction must clear to be applied (default 0.75) |
+| `--max-changed-words` | reject a correction touching more whole words than this (default 2) |
 | `--dpi` | PDF rasterisation resolution (default 300; raise for small print) |
 | `--no-tile` | send whole pages instead of overlapping slices |
 | `--dictionary PATH` | extra word list (plain text or hunspell `.dic`), repeatable |
@@ -148,6 +153,27 @@ every run is in the report. `--passes 1 --no-verify` cuts it to about a fifth,
 and `--model claude-sonnet-5` roughly halves the rest — both trade accuracy for
 price, which is why neither is the default.
 
+## A worked example
+
+`samples/output/` holds a complete run over the three sample pages: the
+converted text, the run report, and a second run with six typical OCR faults
+injected into the reading. Five were reading errors and were corrected; the
+sixth was a suggestion that improved the prose rather than matching the image,
+and was refused:
+
+```
+## اصلاح‌هایی که اعمال شد
+| صفحه | نادرست | درست | دلیل | اطمینان |
+| 2 | `دستغیت` | `دستغیب` | the page shows the dotted form | 0.96 |
+| 2 | ` Edit PDF` | `` | overlay — application toolbar, not part of the page | 0.98 |
+
+## پیشنهادهایی که رد شد (برای شفافیت)
+| 2 | `این گونه واژه‌ها…` ← `این‌گونه واژگان…` | changes 5 whole words — that is a rewrite, not a targeted fix |
+```
+
+The corrected output is byte-identical to the clean run. See
+`samples/README.md` for the caveat on what that demo does and does not prove.
+
 ## Measuring accuracy on your own material
 
 ```bash
@@ -164,7 +190,7 @@ reading accuracy rather than encoding choices; `--strict` compares literally.
 
 ```bash
 pip install -e ".[dev]"
-python -m pytest -q          # 131 tests, no network needed
+python -m pytest -q          # 141 tests, no network needed
 ```
 
 The test suite runs the whole pipeline against a real sample page with a
