@@ -19,9 +19,21 @@
 ```bash
 cd persian-ocr
 pip install -e .
-export ANTHROPIC_API_KEY=...        # یا: ant auth login
-persian-ocr doctor                  # بررسیِ نصب و کلید
+persian-ocr doctor                  # می‌گوید کدام موتور در دسترس است
 ```
+
+**کلیدِ API لازم نیست.** اگر Claude Code را نصب دارید و در آن وارد شده‌اید،
+ابزار خودش از همان نشست استفاده می‌کند و کار روی اشتراکِ موجودِ شما حساب
+می‌شود:
+
+| در دسترس | موتور | چه لازم دارد |
+|---|---|---|
+| `claude` نصب و لاگین شده | `claude-cli` | **هیچ کلیدی** — اشتراکِ Claude Code |
+| `ANTHROPIC_API_KEY` تنظیم شده | `anthropic` | کلیدِ API |
+| هیچ‌کدام، ولی `tesseract` هست | `tesseract` | آفلاین، رایگان، دقتِ به‌مراتب کمتر |
+
+پیش‌فرض `--engine auto` است: هرکدام که باشد خودش انتخاب می‌کند و به شما
+می‌گوید کدام را برداشته.
 
 ## استفاده
 
@@ -115,6 +127,28 @@ The tool refuses to improve the text. Concretely:
   (`واژه‌ها` → `واژگان`, `عبارت‌ها` → `عبارات`) looks similar character by
   character and only shows up when whole changed words are counted.
 
+## Engines — and running without an API key
+
+`--engine auto` (the default) picks whatever is available and tells you which
+it chose:
+
+| Engine | Needs | Notes |
+|---|---|---|
+| `claude-cli` | Claude Code installed and signed in — **no API key** | Drives `claude --print` with a Read-only tool grant and parses the JSON it returns. The work counts against the existing Claude Code subscription. |
+| `anthropic` | `ANTHROPIC_API_KEY` | The HTTP API. Schema-constrained responses, parallel requests, lowest latency. |
+| `tesseract` | `tesseract-ocr-fas` | Fully offline and free. Much weaker on book typography — it has no notion of the half-space and drops diacritics — and it cannot verify, so only the rule and vocabulary checks run. |
+
+```bash
+persian-ocr convert book.pdf -o book.txt                  # auto
+persian-ocr convert book.pdf -o book.txt --engine claude-cli
+```
+
+The CLI engine is slower than the HTTP one (each page is a separate `claude`
+invocation, roughly 40–90 seconds) and gets its JSON by instruction rather than
+by schema constraint, so the engine repairs near-miss reply shapes instead of
+throwing a page away. Everything downstream — consensus, checks, verification,
+vetting, assembly, reporting — is identical.
+
 ## Commands
 
 ```bash
@@ -139,6 +173,7 @@ persian-ocr serve --open                    # local browser UI
 | `--dictionary PATH` | extra word list (plain text or hunspell `.dic`), repeatable |
 | `--pages 1-20,25` | page selection for a single PDF |
 | `--workers N` | pages processed in parallel (default 4) |
+| `--engine claude-cli` | use the signed-in Claude Code CLI instead of an API key |
 | `--engine tesseract` | offline fallback; needs `tesseract-ocr-fas`, and cannot verify |
 | `--prefer-text-layer` | if the PDF already has selectable text, extract that instead |
 
@@ -152,6 +187,23 @@ One page ≈ 2 slices × 2 passes + 1 verification ≈ 5 requests. With
 every run is in the report. `--passes 1 --no-verify` cuts it to about a fifth,
 and `--model claude-sonnet-5` roughly halves the rest — both trade accuracy for
 price, which is why neither is the default.
+
+## Measured on real pages
+
+A live run through the CLI engine over the three sample pages — screenshots of
+a watermarked book inside a PDF reader, toolbars and all:
+
+| Run | Character accuracy | Word accuracy |
+|---|---|---|
+| whole pages, 2 passes, no tiling | 99.42% | 96.04% |
+| one page, tiled, 2 passes + verification | **99.52%** | **98.19%** |
+
+Measured with `persian-ocr benchmark` against the hand-made references in
+`samples/reference/`. Several of the remaining word-level differences are
+half-space judgement calls where the tool is arguably right and the reference
+was normalised by hand — so treat the word figure as a floor.
+
+`samples/output/page-01.live.*` is that run, checked in.
 
 ## A worked example
 
@@ -190,7 +242,7 @@ reading accuracy rather than encoding choices; `--strict` compares literally.
 
 ```bash
 pip install -e ".[dev]"
-python -m pytest -q          # 141 tests, no network needed
+python -m pytest -q          # 164 tests, no network needed
 ```
 
 The test suite runs the whole pipeline against a real sample page with a
@@ -199,5 +251,12 @@ are all exercised offline.
 
 ## Requirements
 
-Python 3.9+, `anthropic`, `pillow`, `pymupdf`. Credentials via
-`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile.
+Python 3.9+, `pillow`, `pymupdf`, and one of:
+
+* **Claude Code**, installed and signed in — no API key, no extra billing;
+* an Anthropic API key (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
+  `ant auth login` profile) with the `anthropic` package;
+* **Tesseract** with `tesseract-ocr-fas` for a fully offline, much less
+  accurate run.
+
+`persian-ocr doctor` reports which of these it can see.

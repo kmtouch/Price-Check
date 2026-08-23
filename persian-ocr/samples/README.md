@@ -50,3 +50,27 @@ reason recorded in the report. The output is byte-identical to the clean run.
 Because the reading is replayed, the 100% benchmark score of this demo says
 nothing about the tool's accuracy against the live API — it measures the rest
 of the pipeline. Run it with your own key to get a real number.
+
+## `output/page-01.live.*` — a real run, no API key
+
+Unlike the replay above, this one is a genuine conversion: `--engine claude-cli`
+driving a signed-in Claude Code CLI, two OCR passes over three overlapping
+slices of the page, then one verification round.
+
+```
+✓ 166 words, 1 page   overall confidence 91.1%   verification corrected 1 span
+persian-ocr benchmark → character accuracy 99.52%   word accuracy 98.19%
+```
+
+Two differences from the reference remain:
+
+* `فارسی‌زبان` vs `فارسی زبان` — a half-space judgement call;
+* `⟨؟⟩` vs `[]` — the page prints a missing-glyph box where empty brackets
+  belong. The tool marked it unreadable, which is arguably more honest than the
+  reference's guess.
+
+The correction the verifier made is the interesting one. A rule check flagged
+`ْنوشتِ` — no Persian word can begin with a sukun. Looking at the image, the
+verifier found the mark belongs above the ه of «که», and rewrote the span as
+`کهْ نوشتِ`. That is the whole design in one line: a cheap deterministic check
+finds *where* to look, and the image decides *what is true*.

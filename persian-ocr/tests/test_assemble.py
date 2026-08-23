@@ -3,6 +3,7 @@ from persian_ocr.assemble import (
     find_overlap,
     merge_tiles,
     paragraph_stats,
+    relate,
     render_document,
     splice,
 )
@@ -109,3 +110,82 @@ def test_two_page_numbers_on_one_image_both_survive():
 def test_page_numbers_keep_their_place_not_the_page_end():
     page = PageResult(0, "p", blocks("۴", kind="page_number") + blocks("متنِ صفحه"))
     assert render_document([page]) == "۴\n\nمتنِ صفحه\n"
+
+
+# --- tile overlap handling -------------------------------------------------
+def test_relate_recognises_a_repeated_paragraph():
+    text = "یک دو سه چهار پنج شش هفت هشت"
+    assert relate(text, text)[0] == "duplicate"
+
+
+def test_relate_recognises_the_tail_of_a_paragraph_we_already_have():
+    whole = "یک دو سه چهار پنج شش هفت هشت نه ده"
+    tail = "شش هفت هشت نه ده"
+    assert relate(whole, tail)[0] == "duplicate"
+
+
+def test_relate_survives_a_small_wording_difference():
+    # Two readings of the same lines differ in punctuation; that must not stop
+    # the repeat from being recognised.
+    whole = "ولی در جاهایِ دیگر که چنین خطایی پیش نمی‌آید، بدون تیره می‌آورم، مانندِ: دانش‌اش، کتاب‌ام."
+    tail = "که چنین خطایی پیش نمی‌آید، بدون تیره می‌آورم، مانندِ دانش‌اش، کتاب‌ام."
+    assert relate(whole, tail)[0] == "duplicate"
+
+
+def test_relate_prefers_the_fuller_reading():
+    clipped = "یک دو سه چهار پنج شش"
+    whole = "یک دو سه چهار پنج شش هفت هشت نه ده یازده"
+    kind, text = relate(clipped, whole)
+    assert kind == "fuller" and text == whole
+
+
+def test_relate_joins_a_paragraph_cut_at_the_seam():
+    head = "یک دو سه چهار پنج شش هفت"
+    tail = "پنج شش هفت هشت نه ده یازده دوازده سیزده"
+    kind, text = relate(head, tail)
+    assert kind == "continues"
+    assert text == "یک دو سه چهار پنج شش هفت هشت نه ده یازده دوازده سیزده"
+
+
+def test_relate_leaves_unrelated_paragraphs_alone():
+    a = "نیچه همیشه بسیار فشرده و جنگی چیز می‌نویسد تا جایی که به نظر می‌رسد"
+    b = "در این ترجمه نیز مانند ترجمه‌های پیشین من از او این گونه واژه‌ها را"
+    assert relate(a, b)[0] == "unrelated"
+
+
+def test_heavily_overlapping_tiles_do_not_double_the_page():
+    # 50%-overlapping tiles repeat whole paragraphs, not just the seam.
+    first = blocks("بندِ یکم که کامل است و تمام شد.", "بندِ دوم که ادامه")
+    second = blocks("بندِ دوم که ادامه دارد و تمام شد.", "بندِ سوم تازه است.")
+    third = blocks("بندِ سوم تازه است.", "بندِ چهارم پایانی است.")
+    merged = merge_tiles([first, second, third])
+    assert [b.text for b in merged] == [
+        "بندِ یکم که کامل است و تمام شد.",
+        "بندِ دوم که ادامه دارد و تمام شد.",
+        "بندِ سوم تازه است.",
+        "بندِ چهارم پایانی است.",
+    ]
+
+
+def test_real_overlapping_tiles_reassemble_into_the_page():
+    """Regression test on real engine output for one of the sample pages.
+
+    `tests/data/real_tiles_page01.json` holds the three tile readings a live
+    run produced. Merged naively they doubled the page; this is the check that
+    they do not.
+    """
+    import json
+    from pathlib import Path
+
+    from persian_ocr.metrics import compare
+
+    root = Path(__file__).resolve().parents[1]
+    tiles = json.loads((root / "tests/data/real_tiles_page01.json").read_text(encoding="utf-8"))
+    merged = merge_tiles([[Block("paragraph", text) for text in tile] for tile in tiles["tiles"]])
+    text = "\n\n".join(block.text for block in merged)
+    reference = (root / "samples/reference/page-01.txt").read_text(encoding="utf-8")
+
+    assert len(merged) == 5
+    # Doubling the page would put word count near 2x; this is the real signal.
+    assert 0.9 < len(text.split()) / len(reference.split()) < 1.1
+    assert compare(text, reference).character_accuracy > 0.98

@@ -13,7 +13,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 from .engines.base import Block
 from .normalize import fold_for_compare
@@ -41,19 +41,73 @@ def find_overlap(a: str, b: str) -> int:
     return 0
 
 
+#: How much of a block has to be accounted for by its neighbour before we call
+#: it the same text. Two readings of the same lines are never byte-identical —
+#: a colon or a half-space differs — so this is deliberately not 1.0.
+CONTAINMENT = 0.85
+
+
+def relate(existing: str, candidate: str) -> Tuple[str, Optional[str]]:
+    """Decide how a block from the next tile relates to one already merged.
+
+    Tiles overlap on purpose, so the next tile usually re-reads lines that are
+    already in the document — sometimes as a whole repeated paragraph,
+    sometimes as the tail of a paragraph that was cut, sometimes as the
+    *complete* version of a paragraph the previous tile only saw the top of.
+    All three have to be recognised, or the page comes out doubled.
+
+    Returns one of:
+      ``("duplicate", None)``   — the candidate adds nothing, drop it
+      ``("fuller", text)``      — the candidate is the more complete reading
+      ``("continues", text)``   — the two halves join into one paragraph
+      ``("unrelated", None)``   — genuinely new text
+    """
+    a, b = _folded_words(existing), _folded_words(candidate)
+    if not a or not b:
+        return ("unrelated", None)
+
+    matcher = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    blocks = [m for m in matcher.get_matching_blocks() if m.size]
+    if not blocks:
+        return ("unrelated", None)
+    # Total matched words, not the longest single run: two readings of the same
+    # lines differ in small ways (a colon, a half-space) that split one long
+    # match into several, and judging by the longest run alone then misses the
+    # repeat by a hair.
+    matched = sum(m.size for m in blocks)
+    longest = max(blocks, key=lambda m: m.size)
+
+    # Unrelated Persian paragraphs still share function words, so a high total
+    # only counts when at least one substantial run backs it up.
+    substantial = longest.size >= max(MIN_OVERLAP_WORDS, 0.35 * min(len(a), len(b)))
+
+    if substantial and matched >= CONTAINMENT * len(b):
+        return ("duplicate", None)
+    if substantial and matched >= CONTAINMENT * len(a):
+        return ("fuller", candidate)
+    # The tail of what we have is the head of what arrived: one paragraph, cut.
+    if (
+        longest.size >= MIN_OVERLAP_WORDS
+        and longest.a + longest.size >= len(a) - 1
+        and longest.b <= 1
+    ):
+        tail = candidate.split()[longest.b + longest.size :]
+        return ("continues", (existing + " " + " ".join(tail)).strip())
+    return ("unrelated", None)
+
+
 def splice(a: str, b: str) -> Optional[str]:
     """Join two halves of the same paragraph read from overlapping tiles."""
+    kind, text = relate(a, b)
+    if kind == "duplicate":
+        return a
+    if kind == "fuller":
+        return text
+    if kind == "continues":
+        return text
     overlap = find_overlap(a, b)
     if overlap:
-        tail = b.split()
-        return (a + " " + " ".join(tail[overlap:])).strip()
-    if _similar(a, b) >= 0.9:
-        return a if len(a) >= len(b) else b
-    folded_a, folded_b = fold_for_compare(a), fold_for_compare(b)
-    if folded_b and folded_b in folded_a:
-        return a
-    if folded_a and folded_a in folded_b:
-        return b
+        return (a + " " + " ".join(b.split()[overlap:])).strip()
     return None
 
 
@@ -79,41 +133,73 @@ class PageResult:
         return "\n".join(block.text for block in self.blocks if block.text.strip())
 
 
+#: How far back to look for a block the new tile is repeating. Generous
+#: overlaps can repeat several paragraphs, not just the seam.
+LOOKBACK_BLOCKS = 8
+
+
 def merge_tiles(tile_blocks: Sequence[Sequence[Block]], join_cut_paragraphs: bool = True) -> List[Block]:
-    """Concatenate per-tile blocks, removing the deliberate overlap."""
+    """Concatenate per-tile blocks, removing the deliberate overlap.
+
+    Each block of an arriving tile is checked against the last few blocks
+    already merged, because a 50%-overlapping tile repeats whole paragraphs
+    rather than just clipping one at the seam.
+    """
     merged: List[Block] = []
-    for blocks in tile_blocks:
-        blocks = [b for b in blocks if b.text.strip()]
+    for tile_index, blocks in enumerate(tile_blocks):
+        blocks = [Block(b.type, b.text.strip()) for b in blocks if b.text.strip()]
         if not merged:
-            merged.extend(Block(b.type, b.text.strip()) for b in blocks)
+            merged.extend(blocks)
             continue
 
-        remaining = list(blocks)
+        first_of_tile = True
+        for block in blocks:
+            placed = False
+            start = max(0, len(merged) - LOOKBACK_BLOCKS)
+            for position in range(len(merged) - 1, start - 1, -1):
+                kind, text = relate(merged[position].text, block.text)
+                if kind == "duplicate":
+                    placed = True
+                    break
+                if kind == "fuller":
+                    merged[position] = Block(merged[position].type, text)
+                    placed = True
+                    break
+                if kind == "continues" and position == len(merged) - 1:
+                    merged[position] = Block(merged[position].type, text)
+                    placed = True
+                    break
+            if placed:
+                first_of_tile = False
+                continue
 
-        # 1. Drop whole blocks the previous tile already produced.
-        while remaining and any(
-            _similar(remaining[0].text, previous.text) >= 0.92 for previous in merged[-4:]
-        ):
-            remaining.pop(0)
-
-        # 2. Splice a paragraph that the tile boundary cut in half.
-        if remaining and merged:
-            joined = splice(merged[-1].text, remaining[0].text)
-            if joined is not None:
-                merged[-1] = Block(merged[-1].type, joined)
-                remaining.pop(0)
-            elif (
+            # No textual overlap at all: only the very first block of a tile can
+            # be the continuation of a paragraph the previous tile cut off.
+            if (
                 join_cut_paragraphs
+                and first_of_tile
+                and merged
                 and merged[-1].type == "paragraph"
-                and remaining[0].type == "paragraph"
+                and block.type == "paragraph"
                 and merged[-1].text
                 and merged[-1].text[-1] not in SENTENCE_END
             ):
-                merged[-1] = Block("paragraph", f"{merged[-1].text} {remaining[0].text}".strip())
-                remaining.pop(0)
+                merged[-1] = Block("paragraph", f"{merged[-1].text} {block.text}".strip())
+            else:
+                merged.append(block)
+            first_of_tile = False
 
-        merged.extend(Block(b.type, b.text.strip()) for b in remaining)
-    return merged
+    return _drop_repeats(merged)
+
+
+def _drop_repeats(blocks: List[Block]) -> List[Block]:
+    """Final safety net: no block may repeat an earlier one on the same page."""
+    kept: List[Block] = []
+    for block in blocks:
+        if any(relate(earlier.text, block.text)[0] == "duplicate" for earlier in kept):
+            continue
+        kept.append(block)
+    return kept
 
 
 def page_numbers_in(blocks: Sequence[Block]) -> List[str]:

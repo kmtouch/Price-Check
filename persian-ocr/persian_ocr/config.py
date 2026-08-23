@@ -47,7 +47,7 @@ class Settings:
     """Everything the pipeline needs to know, in one immutable-ish bundle."""
 
     # --- engines -----------------------------------------------------------
-    engine: str = "anthropic"
+    engine: str = "auto"
     model: str = DEFAULT_MODEL
     verify_model: str = DEFAULT_VERIFY_MODEL
     api_key: Optional[str] = None

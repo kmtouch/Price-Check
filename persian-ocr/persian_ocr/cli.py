@@ -30,8 +30,9 @@ def _progress_printer(quiet: bool):
 
 def _add_engine_arguments(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("engine")
-    group.add_argument("--engine", default="anthropic", choices=available_engines(),
-                       help="which OCR engine to use (default: anthropic)")
+    group.add_argument("--engine", default="auto", choices=available_engines(),
+                       help="OCR engine (default: auto — an API key if set, else the "
+                            "signed-in `claude` CLI, else tesseract)")
     group.add_argument("--model", default=DEFAULT_MODEL, help=f"vision model (default: {DEFAULT_MODEL})")
     group.add_argument("--verify-model", default=DEFAULT_VERIFY_MODEL,
                        help=f"model used for verification (default: {DEFAULT_VERIFY_MODEL})")
@@ -408,13 +409,21 @@ def command_doctor(args: argparse.Namespace) -> int:
 
     has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
     profile = Path.home() / ".config" / "anthropic"
-    check(
-        "Anthropic credentials",
-        has_key or profile.exists(),
-        "export ANTHROPIC_API_KEY=… or run `ant auth login`",
-    )
+    claude_cli = shutil.which(os.environ.get("PERSIAN_OCR_CLAUDE_BIN") or "claude")
+    check("Anthropic API key (optional)", has_key or profile.exists(),
+          "not set — that is fine if the `claude` CLI below is available", required=False)
+    check("claude CLI (works without an API key)", claude_cli is not None,
+          "install Claude Code from https://claude.com/claude-code and sign in", required=False)
     check("tesseract (optional offline engine)", shutil.which("tesseract") is not None,
           "sudo apt install tesseract-ocr tesseract-ocr-fas", required=False)
+
+    from .engines import EngineError, resolve_engine
+
+    try:
+        print(f"  [✓] engine `auto` resolves to `{resolve_engine('auto')}`")
+    except EngineError as exc:
+        ok = False
+        print(f"  [✗] no usable engine — {exc}")
 
     from .lexicon import Lexicon
 
