@@ -251,7 +251,7 @@ are all exercised offline.
 
 ## Requirements
 
-Python 3.9+, `pillow`, `pymupdf`, and one of:
+Python 3.10+ (the Anthropic SDK's own floor), `pillow`, `pymupdf`, and one of:
 
 * **Claude Code**, installed and signed in — no API key, no extra billing;
 * an Anthropic API key (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
