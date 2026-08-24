@@ -2,6 +2,7 @@
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true">
@@ -17,13 +18,14 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/server_url_label">
+            android:hint="@string/server_url_label"
+            app:helperText="@string/server_url_hint"
+            app:helperTextEnabled="true">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/serverUrlInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="@string/server_url_hint"
                 android:inputType="textUri"
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
@@ -149,6 +151,15 @@
             android:layout_height="56dp"
             android:layout_marginTop="28dp"
             android:text="@string/save_settings" />
+
+        <TextView
+            android:id="@+id/buildIdText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceCaption"
+            tools:text="Build 774ef00 · v1.0.0" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

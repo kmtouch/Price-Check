@@ -101,6 +101,22 @@ Android Gradle Plugin and SDK) and an installed Android SDK — the
 automatically and uploads the resulting debug APK as a build artifact on every
 push that touches this directory.
 
+### Updating the app on your phone
+
+`app/debug.keystore` is checked into the repo on purpose and every debug
+build is signed with it — CI's, and yours if you build locally. A *debug*
+keystore carries no real trust (that's the release key's job) and is meant to
+be shared across every machine that builds the app; without a fixed one,
+every CI run would generate a fresh keystore (GitHub Actions runners are
+ephemeral), each build would carry a different signature, and Android would
+refuse to install a new one over the last with an unhelpful "App not
+installed" — forcing an uninstall before every single update. With the fixed
+keystore, installing a newer APK over an older one just works, the same way
+an app update from the Play Store does.
+
+The Settings screen shows which build is running (`Build <short-sha> · v...`)
+— check that after installing if you want to confirm it actually updated.
+
 ### Project layout
 
 ```

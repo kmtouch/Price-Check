@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import ca.kmeng.persianocr.BuildConfig
 import ca.kmeng.persianocr.R
 import ca.kmeng.persianocr.databinding.ActivitySettingsBinding
 import ca.kmeng.persianocr.net.ConnectionCheck
@@ -38,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.testConnectionButton.setOnClickListener { testConnection() }
         binding.saveSettingsButton.setOnClickListener { saveAndFinish() }
+        binding.buildIdText.text = "Build ${BuildConfig.BUILD_ID} · v${BuildConfig.VERSION_NAME}"
     }
 
     private fun selectedPasses(): Int = when (binding.passesGroup.checkedRadioButtonId) {
