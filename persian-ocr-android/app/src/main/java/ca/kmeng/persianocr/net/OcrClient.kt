@@ -261,6 +261,9 @@ fun uploadFileFrom(resolver: ContentResolver, uri: Uri, fallbackIndex: Int): Upl
             if (sizeIndex >= 0) size = cursor.getLong(sizeIndex)
         }
     }
+    // Shadow as a val: displayName above is a var mutated inside the query lambda, so
+    // Kotlin won't smart-cast it to non-null below even after an explicit null check.
+    val displayName = displayName
     val mimeType = resolver.getType(uri) ?: "application/octet-stream"
     val mimeExtension = when {
         mimeType.contains("pdf") -> "pdf"
