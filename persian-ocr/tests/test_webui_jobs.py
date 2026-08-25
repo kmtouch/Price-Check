@@ -159,6 +159,40 @@ def test_a_request_with_no_files_is_rejected_before_a_job_is_created(running_ser
     assert "error" in payload
 
 
+def test_a_real_image_is_accepted_despite_a_nameless_filename(running_server):
+    # Some content providers (a phone gallery app, a share-sheet forward) hand
+    # a client a display name with no extension at all, even though the bytes
+    # are unambiguously a real image. The server should sniff the actual
+    # content rather than reject solely because the filename has no suffix.
+    status, payload = _post_multipart(
+        running_server,
+        {"passes": "1"},
+        {"files": ("IMG20260825", _tiny_png(), "application/octet-stream")},
+    )
+    assert status == 202
+    assert "job_id" in payload and payload["job_id"]
+
+
+def test_a_real_image_is_accepted_despite_a_wrong_extension(running_server):
+    status, payload = _post_multipart(
+        running_server,
+        {"passes": "1"},
+        {"files": ("page.bin", _tiny_png(), "application/octet-stream")},
+    )
+    assert status == 202
+    assert "job_id" in payload and payload["job_id"]
+
+
+def test_a_file_that_is_not_actually_a_supported_type_is_still_rejected(running_server):
+    status, payload = _post_multipart(
+        running_server,
+        {},
+        {"files": ("notes.txt", b"just some plain text, not an image", "text/plain")},
+    )
+    assert status == 400
+    assert "error" in payload
+
+
 def test_progress_is_visible_while_a_job_is_running(running_server):
     _, submitted = _post_multipart(
         running_server, {"passes": "1"}, {"files": ("page.png", _tiny_png(), "image/png")}

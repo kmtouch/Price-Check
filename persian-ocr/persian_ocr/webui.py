@@ -43,6 +43,30 @@ JOB_TTL_SECONDS = 6 * 3600
 _PAGE_TOTAL_RE = re.compile(r"loaded (\d+) page\(s\)")
 _PAGE_DONE_RE = re.compile(r"^page (\d+) done \(")
 
+# Magic-byte signatures, checked when a filename's own suffix isn't one
+# SUPPORTED_SUFFIXES recognizes. A client (a gallery app, a share-sheet
+# forward, a browser) can hand over a genuinely supported image or PDF under
+# a filename with no extension or a mismatched one; sniffing the actual
+# bytes is ground truth no client-side naming quirk can misreport.
+_MAGIC_SIGNATURES: List[Tuple[bytes, str]] = [
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"%PDF", ".pdf"),
+    (b"GIF8", ".gif"),
+    (b"BM", ".bmp"),
+    (b"II*\x00", ".tif"),
+    (b"MM\x00*", ".tif"),
+]
+
+
+def _sniff_suffix(data: bytes) -> Optional[str]:
+    for magic, suffix in _MAGIC_SIGNATURES:
+        if data.startswith(magic):
+            return suffix
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
 
 def parse_multipart(body: bytes, boundary: bytes) -> Tuple[List[Tuple[str, bytes]], Dict[str, str]]:
     """Minimal multipart/form-data parser (files and plain fields).
@@ -416,7 +440,17 @@ class Handler(BaseHTTPRequestHandler):
 
         boundary = content_type.split("boundary=")[1].strip().strip('"').encode()
         files, fields = parse_multipart(self.rfile.read(length), boundary)
-        files = [(name, data) for name, data in files if Path(name).suffix.lower() in SUPPORTED_SUFFIXES]
+        resolved_files: List[Tuple[str, bytes]] = []
+        for name, data in files:
+            if Path(name).suffix.lower() in SUPPORTED_SUFFIXES:
+                resolved_files.append((name, data))
+                continue
+            sniffed_suffix = _sniff_suffix(data)
+            if sniffed_suffix is None:
+                continue
+            stem = Path(name).stem or "upload"
+            resolved_files.append((f"{stem}{sniffed_suffix}", data))
+        files = resolved_files
         if not files:
             self._error(400, "no supported files were uploaded")
             return

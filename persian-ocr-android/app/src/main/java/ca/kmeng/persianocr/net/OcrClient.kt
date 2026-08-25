@@ -261,40 +261,71 @@ fun uploadFileFrom(resolver: ContentResolver, uri: Uri, fallbackIndex: Int): Upl
             if (sizeIndex >= 0) size = cursor.getLong(sizeIndex)
         }
     }
-    // Read into a val: rawDisplayName is a var mutated inside the query lambda above, so
-    // Kotlin won't smart-cast it to non-null below even after an explicit null check.
     val displayName: String? = rawDisplayName
     val mimeType = resolver.getType(uri) ?: "application/octet-stream"
-    val mimeExtension = when {
-        mimeType.contains("pdf") -> "pdf"
-        mimeType.contains("png") -> "png"
-        mimeType.contains("webp") -> "webp"
-        mimeType.contains("jpeg") || mimeType.contains("jpg") -> "jpg"
-        mimeType.contains("bmp") -> "bmp"
-        mimeType.contains("tiff") -> "tif"
-        mimeType.contains("gif") -> "gif"
-        else -> "bin"
-    }
-    // Some content providers (gallery apps, cloud storage, Google Photos) hand back a
-    // DISPLAY_NAME with no extension, or one the server's whitelist doesn't recognize,
-    // even though the MIME type correctly identifies it as a supported image/PDF. The
-    // server keys its supported-file check purely off the filename suffix, so trusting
-    // an extension-less or unrecognized display name here silently gets the whole
-    // upload rejected with "no supported files were uploaded". Only keep the display
-    // name's own extension when it is one the server actually accepts.
+    val baseName = displayName?.substringBeforeLast('.') ?: "page-$fallbackIndex"
     val displayExtension = displayName?.substringAfterLast('.', "")?.lowercase()
-    val name = when {
-        displayExtension != null && displayExtension in RECOGNIZED_EXTENSIONS ->
-            displayName!!
-        displayName != null ->
-            "${displayName.substringBeforeLast('.')}.$mimeExtension"
-        else ->
-            "page-$fallbackIndex.$mimeExtension"
+
+    // The server only trusts the filename's suffix (persian_ocr/ingest.py's
+    // SUPPORTED_SUFFIXES), so any extension it doesn't recognize silently gets
+    // the whole upload rejected with "no supported files were uploaded" — no
+    // matter how correctly the file itself is typed. Try three sources in
+    // order of how much they can be trusted: the display name's own
+    // extension when it's already one the server accepts; otherwise the
+    // resolved MIME type; and only when *both* of those are unhelpful (some
+    // gallery/cloud providers report a bare name and a generic
+    // application/octet-stream alike) fall back to sniffing the file's own
+    // magic bytes, which no provider metadata quirk can misreport.
+    val extension = when {
+        displayExtension != null && displayExtension in RECOGNIZED_EXTENSIONS -> displayExtension
+        else -> extensionFromMime(mimeType) ?: sniffExtension(resolver, uri) ?: "bin"
     }
     return UploadFile(
-        name = name,
+        name = "$baseName.$extension",
         mimeType = mimeType,
         openStream = { resolver.openInputStream(uri) ?: error("could not open $uri") },
         length = size,
     )
+}
+
+private fun extensionFromMime(mimeType: String): String? = when {
+    mimeType.contains("pdf") -> "pdf"
+    mimeType.contains("png") -> "png"
+    mimeType.contains("webp") -> "webp"
+    mimeType.contains("jpeg") || mimeType.contains("jpg") -> "jpg"
+    mimeType.contains("bmp") -> "bmp"
+    mimeType.contains("tiff") -> "tif"
+    mimeType.contains("gif") -> "gif"
+    else -> null
+}
+
+/** Identifies a file by its leading bytes (magic numbers) — the ground truth
+ * when neither the content provider's display name nor its MIME type gives a
+ * usable extension. */
+private fun sniffExtension(resolver: ContentResolver, uri: Uri): String? {
+    val header = ByteArray(12)
+    val read = resolver.openInputStream(uri)?.use { input ->
+        var total = 0
+        while (total < header.size) {
+            val n = input.read(header, total, header.size - total)
+            if (n <= 0) break
+            total += n
+        }
+        total
+    } ?: return null
+
+    fun matches(vararg bytes: Int, from: Int = 0): Boolean =
+        read >= from + bytes.size && bytes.indices.all { header[from + it] == bytes[it].toByte() }
+
+    return when {
+        matches(0xFF, 0xD8, 0xFF) -> "jpg"
+        matches(0x89, 0x50, 0x4E, 0x47) -> "png"
+        matches(0x25, 0x50, 0x44, 0x46) -> "pdf" // %PDF
+        matches(0x47, 0x49, 0x46, 0x38) -> "gif" // GIF8
+        matches(0x42, 0x4D) -> "bmp" // BM
+        matches(0x52, 0x49, 0x46, 0x46) && matches(0x57, 0x45, 0x42, 0x50, from = 8) -> "webp" // RIFF....WEBP
+        matches(0x49, 0x49, 0x2A) -> "tif" // little-endian TIFF
+        matches(0x4D, 0x4D, 0x00, 0x2A) -> "tif" // big-endian TIFF
+        else -> null
+    }
 }
