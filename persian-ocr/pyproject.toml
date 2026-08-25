@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "persian-ocr"
+version = "1.0.0"
+description = "High-accuracy Persian OCR: scanned PDFs and images to verified plain text"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "anthropic>=1.0.0",
+    "pillow>=10.0.0",
+    "pymupdf>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+persian-ocr = "persian_ocr.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["persian_ocr*"]
+
+[tool.setuptools.package-data]
+persian_ocr = ["data/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

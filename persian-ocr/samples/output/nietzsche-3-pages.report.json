@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-08-23T03:07:19+00:00",
+  "output": "samples/output/nietzsche-3-pages.txt",
+  "engine": "mock",
+  "model": "mock",
+  "overall_confidence": 0.9685,
+  "statistics": {
+    "characters": 3520,
+    "words": 659,
+    "paragraphs": 13,
+    "lines": 13,
+    "pages": 3,
+    "seconds": 3.22,
+    "engine": "mock",
+    "model": "mock",
+    "lexicon_coverage": 1.0
+  },
+  "normalisation": {
+    "spacing": 1
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "requests": 9,
+    "estimated_cost_usd": 0.0
+  },
+  "cache": {
+    "hits": 0,
+    "misses": 0
+  },
+  "warnings": [],
+  "settings": {
+    "passes": 2,
+    "verify": true,
+    "verify_rounds": 2,
+    "dpi": 300,
+    "tile": false,
+    "normalize": true
+  },
+  "pages": [
+    {
+      "index": 1,
+      "source": "page-01.jpg",
+      "printed_page_numbers": [],
+      "confidence": 1.0,
+      "cross_pass_agreement": 1.0,
+      "legibility": "high",
+      "words": 167,
+      "seconds": 0.93,
+      "notes": [
+        "cropped away the surrounding application chrome"
+      ],
+      "open_flags": [],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": []
+    },
+    {
+      "index": 2,
+      "source": "page-02.jpg",
+      "printed_page_numbers": [
+        "۴",
+        "۵"
+      ],
+      "confidence": 1.0,
+      "cross_pass_agreement": 1.0,
+      "legibility": "high",
+      "words": 257,
+      "seconds": 1.0,
+      "notes": [
+        "cropped away the surrounding application chrome"
+      ],
+      "open_flags": [],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": []
+    },
+    {
+      "index": 3,
+      "source": "page-03.jpg",
+      "printed_page_numbers": [],
+      "confidence": 0.9118,
+      "cross_pass_agreement": 1.0,
+      "legibility": "medium",
+      "words": 235,
+      "seconds": 1.0,
+      "notes": [
+        "cropped away the surrounding application chrome"
+      ],
+      "open_flags": [
+        "block 1 contains an unreadable span (⟨؟⟩)"
+      ],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": []
+    }
+  ]
+}

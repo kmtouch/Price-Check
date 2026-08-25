@@ -1,0 +1,91 @@
+{
+  "generated_at": "2026-08-23T03:30:21+00:00",
+  "output": "samples/output/page-01.live.txt",
+  "engine": "claude-cli",
+  "model": "claude-cli",
+  "overall_confidence": 0.9115,
+  "statistics": {
+    "characters": 913,
+    "words": 166,
+    "paragraphs": 5,
+    "lines": 5,
+    "pages": 1,
+    "seconds": 70.45,
+    "engine": "claude-cli",
+    "model": "claude-cli",
+    "lexicon_coverage": 0.9935
+  },
+  "normalisation": {
+    "spacing": 1
+  },
+  "usage": {
+    "input_tokens": 147000,
+    "output_tokens": 3376,
+    "requests": 2,
+    "estimated_cost_usd": 0.0
+  },
+  "cache": {
+    "hits": 5,
+    "misses": 2
+  },
+  "warnings": [],
+  "settings": {
+    "passes": 2,
+    "verify": true,
+    "verify_rounds": 1,
+    "dpi": 300,
+    "tile": true,
+    "normalize": true
+  },
+  "pages": [
+    {
+      "index": 1,
+      "source": "page-01.jpg",
+      "printed_page_numbers": [],
+      "confidence": 0.9115,
+      "cross_pass_agreement": 0.9146,
+      "legibility": "high",
+      "words": 166,
+      "seconds": 70.38,
+      "notes": [
+        "cropped away the surrounding application chrome",
+        "verifier: The glyph after «کروشه» in block 3 is printed on the page as an empty/undisplayable box (missing font glyph), so its actual character cannot be read; the transcription's ⟨؟⟩ placeholder was left as is. The apparent gap in «پیچیدگی‌های» (block 2) is a font-rendering artifact of the page image, not a printed space; «واژه‌هایِ», «جمله‌هایِ», «برایِ خواننده‌یِ» all show the ezafe kasra in the image, as transcribed. UI overlay text (Generative summary, Continue, Edit PDF, Comment, etc.) and the watermark were correctly excluded from the transcription.",
+        "verification changed 1 span(s)"
+      ],
+      "open_flags": [
+        "block 3 contains an unreadable span (⟨؟⟩)",
+        "فارسی‌زبان — not found in the reference vocabulary"
+      ],
+      "ignored_overlays": [
+        "app toolbar with back arrow, brightness, speaker, search, share and overflow icons",
+        "\"Generative summary\" panel with Continue button and X close icon",
+        "\"Generative AI User Guidelines.\" link",
+        "bookmark icon",
+        "diagonal watermark text",
+        "app toolbar: back arrow, brightness icon, speaker icon, search icon, share icon, overflow menu",
+        "\"Generative summary\" banner with \"Continue\" button and close (X)",
+        "diagonal watermark text (\"...bashim\")",
+        "diagonal repeated watermark text: \"...edanim va Agah bashim\"",
+        "diagonal repeated watermark text \"Bedanim va Agah bashim\"",
+        "diagonal watermark: Bedanim va Agah",
+        "floating chat button (bottom right)",
+        "app toolbar: Edit PDF, Comment, Highlight, Draw, Fill & Sign, More tools",
+        "bottom sheet drag handle",
+        "diagonal watermark \"Bedanim va Agah\"",
+        "floating chat/AI button (bottom right)",
+        "PDF app toolbar: Edit PDF, Comment, Highlight, Draw, Fill & Sign, More tools"
+      ],
+      "corrections": [
+        {
+          "block_index": 4,
+          "original": "که ْنوشتِ",
+          "corrected": "کهْ نوشتِ",
+          "reason": "The sukun is printed above the ه of «که» (کهْ), not before نوشت; the page shows «کهْ نوشتِ»",
+          "confidence": 0.83,
+          "applied": true,
+          "rejected_because": null
+        }
+      ]
+    }
+  ]
+}

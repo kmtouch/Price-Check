@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-08-23T03:07:23+00:00",
+  "output": "samples/output/demo-error-recovery.txt",
+  "engine": "mock",
+  "model": "mock",
+  "overall_confidence": 0.9676,
+  "statistics": {
+    "characters": 3520,
+    "words": 659,
+    "paragraphs": 13,
+    "lines": 13,
+    "pages": 3,
+    "seconds": 3.23,
+    "engine": "mock",
+    "model": "mock",
+    "lexicon_coverage": 1.0
+  },
+  "normalisation": {
+    "spacing": 1
+  },
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "requests": 10,
+    "estimated_cost_usd": 0.0
+  },
+  "cache": {
+    "hits": 0,
+    "misses": 0
+  },
+  "warnings": [],
+  "settings": {
+    "passes": 2,
+    "verify": true,
+    "verify_rounds": 2,
+    "dpi": 300,
+    "tile": false,
+    "normalize": true
+  },
+  "pages": [
+    {
+      "index": 1,
+      "source": "page-01.jpg",
+      "printed_page_numbers": [],
+      "confidence": 1.0,
+      "cross_pass_agreement": 1.0,
+      "legibility": "high",
+      "words": 167,
+      "seconds": 0.98,
+      "notes": [
+        "cropped away the surrounding application chrome",
+        "verifier: watermark crosses the text block; readings taken from the strokes underneath"
+      ],
+      "open_flags": [],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": []
+    },
+    {
+      "index": 2,
+      "source": "page-02.jpg",
+      "printed_page_numbers": [
+        "۴",
+        "۵"
+      ],
+      "confidence": 1.0,
+      "cross_pass_agreement": 1.0,
+      "legibility": "high",
+      "words": 257,
+      "seconds": 0.96,
+      "notes": [
+        "cropped away the surrounding application chrome",
+        "verifier: watermark crosses the text block; readings taken from the strokes underneath",
+        "verification changed 4 span(s)"
+      ],
+      "open_flags": [],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": [
+        {
+          "block_index": 3,
+          "original": "دستغیت",
+          "corrected": "دستغیب",
+          "reason": "the page shows the dotted form",
+          "confidence": 0.96,
+          "applied": true,
+          "rejected_because": null
+        },
+        {
+          "block_index": 3,
+          "original": "می‌گیرذ",
+          "corrected": "می‌گیرد",
+          "reason": "the page shows the dotted form",
+          "confidence": 0.96,
+          "applied": true,
+          "rejected_because": null
+        },
+        {
+          "block_index": 3,
+          "original": "زیباروبان",
+          "corrected": "زیبارویان",
+          "reason": "the page shows the dotted form",
+          "confidence": 0.96,
+          "applied": true,
+          "rejected_because": null
+        },
+        {
+          "block_index": 5,
+          "original": " Edit PDF",
+          "corrected": "",
+          "reason": "overlay — application toolbar, not part of the page",
+          "confidence": 0.98,
+          "applied": true,
+          "rejected_because": null
+        },
+        {
+          "block_index": 2,
+          "original": "این گونه واژه‌ها و عبارت‌ها و جمله‌ها",
+          "corrected": "این‌گونه واژگان و عبارات و جملات",
+          "reason": "reads more fluently",
+          "confidence": 0.99,
+          "applied": false,
+          "rejected_because": "changes 5 whole words — that is a rewrite, not a targeted fix"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "source": "page-03.jpg",
+      "printed_page_numbers": [],
+      "confidence": 0.9092,
+      "cross_pass_agreement": 0.9957,
+      "legibility": "medium",
+      "words": 235,
+      "seconds": 0.98,
+      "notes": [
+        "cropped away the surrounding application chrome",
+        "verifier: watermark crosses the text block; readings taken from the strokes underneath",
+        "verifier: watermark crosses the text block; readings taken from the strokes underneath",
+        "verification changed 1 span(s)"
+      ],
+      "open_flags": [
+        "block 1 contains an unreadable span (⟨؟⟩)"
+      ],
+      "ignored_overlays": [
+        "Adobe Acrobat toolbar",
+        "diagonal watermark: Bedanim va Agah bashim"
+      ],
+      "corrections": [
+        {
+          "block_index": 1,
+          "original": "پرسنیده‌اند",
+          "corrected": "پرستیده‌اند",
+          "reason": "the page shows the dotted form",
+          "confidence": 0.96,
+          "applied": true,
+          "rejected_because": null
+        }
+      ]
+    }
+  ]
+}

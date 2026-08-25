@@ -1,0 +1,50 @@
+<resources>
+    <string name="app_name">تبدیل فارسی به متن</string>
+    <string name="settings_title">تنظیماتِ سرور</string>
+    <string name="result_title">متنِ تبدیل‌شده</string>
+
+    <string name="server_url_label">نشانیِ سرور</string>
+    <string name="server_url_hint">http://192.168.1.23:8765</string>
+    <string name="server_url_help">روی رایانه‌ای که Claude Code (یا کلیدِ API) دارد
+        دستورِ «persian-ocr serve --host 0.0.0.0» را اجرا کنید و نشانی‌اش را اینجا
+        وارد کنید. گوشی و آن رایانه باید در یک شبکه باشند.</string>
+    <string name="test_connection">آزمایشِ اتصال</string>
+    <string name="connection_ok">متصل شد — %1$s</string>
+    <string name="connection_failed">اتصال برقرار نشد: %1$s</string>
+
+    <string name="pick_files">انتخابِ عکس یا PDF</string>
+    <string name="take_photo">گرفتنِ عکس</string>
+    <string name="files_chosen">%1$d فایل انتخاب شد</string>
+    <string name="no_files_chosen">هنوز فایلی انتخاب نشده است</string>
+    <string name="convert">تبدیل به متن</string>
+    <string name="converting">در حالِ خواندنِ صفحه‌ها… ممکن است یکی دو دقیقه طول بکشد</string>
+    <string name="settings">تنظیمات</string>
+
+    <string name="opt_verify">وارسی در برابرِ تصویر (پیشنهادی)</string>
+    <string name="opt_normalize">یکدست‌سازیِ نویسه‌های فارسی</string>
+    <string name="opt_page_numbers">نگه‌داشتنِ شماره‌ی چاپیِ صفحه</string>
+    <string name="opt_passes">تعدادِ پاس‌های OCR برای هر صفحه</string>
+
+    <string name="no_server_set">اول در تنظیمات، نشانیِ سرور را وارد کنید.</string>
+    <string name="upload_failed">تبدیل ناموفق بود: %1$s</string>
+    <string name="upload_failed_hint">بررسی کنید سرور روشن و در دسترس باشد و
+        هر دو دستگاه در یک شبکه باشند.</string>
+
+    <string name="confidence_label">اطمینان: %1$.1f٪</string>
+    <string name="words_pages_label">%1$d واژه · %2$d صفحه</string>
+    <string name="corrections_label">%1$d اصلاح توسطِ وارسی اعمال شد</string>
+    <string name="low_confidence_label">صفحه‌هایی که ارزشِ نگاهِ دوباره دارند: %1$s</string>
+    <string name="copy">رونوشت</string>
+    <string name="share">هم‌رسانی</string>
+    <string name="save">ذخیره به‌صورتِ TXT</string>
+    <string name="copied">در کلیپ‌بورد کپی شد</string>
+    <string name="saved">ذخیره شد</string>
+    <string name="save_failed">ذخیره ناموفق بود: %1$s</string>
+    <string name="camera_permission_denied">برای گرفتنِ عکس، دسترسیِ دوربین لازم است.</string>
+    <string name="save_settings">ذخیره</string>
+    <string name="opt_strip_headers">حذفِ سربرگ/پابرگ/واترمارکِ تکراری</string>
+    <string name="opt_passes_help">این گزینه تعدادِ صفحه‌های قابلِ تبدیل را محدود نمی‌کند — هیچ سقفی برای شمارِ صفحه‌ها وجود ندارد. این عدد می‌گوید هر صفحه چند بار جداگانه بازخوانی شود تا خطاها بررسی‌متقابل شوند.</string>
+    <string name="converting_background_hint">می‌توانید از اپ خارج شوید؛ تبدیل روی سرور ادامه پیدا می‌کند و با بازگشت، همچنان اینجاست.</string>
+    <string name="page_progress">صفحه‌ی %1$d از %2$d</string>
+    <string name="resuming_job">در حالِ ادامه‌ی تبدیلی که قبلاً شروع شده بود…</string>
+</resources>

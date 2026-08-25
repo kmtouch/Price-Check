@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.PersianOcr" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/brand_accent</item>
+        <item name="colorPrimaryDark">@color/brand_primary_dark</item>
+        <item name="colorAccent">@color/brand_accent</item>
+    </style>
+</resources>
