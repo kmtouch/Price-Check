@@ -251,19 +251,19 @@ object OcrClient {
 
 /** Wraps a content:// picker result as an [UploadFile], resolving its display name and type. */
 fun uploadFileFrom(resolver: ContentResolver, uri: Uri, fallbackIndex: Int): UploadFile {
-    var displayName: String? = null
+    var rawDisplayName: String? = null
     var size = -1L
     resolver.query(uri, null, null, null, null)?.use { cursor ->
         val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
         val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
         if (cursor.moveToFirst()) {
-            if (nameIndex >= 0) displayName = cursor.getString(nameIndex)
+            if (nameIndex >= 0) rawDisplayName = cursor.getString(nameIndex)
             if (sizeIndex >= 0) size = cursor.getLong(sizeIndex)
         }
     }
-    // Shadow as a val: displayName above is a var mutated inside the query lambda, so
+    // Read into a val: rawDisplayName is a var mutated inside the query lambda above, so
     // Kotlin won't smart-cast it to non-null below even after an explicit null check.
-    val displayName = displayName
+    val displayName: String? = rawDisplayName
     val mimeType = resolver.getType(uri) ?: "application/octet-stream"
     val mimeExtension = when {
         mimeType.contains("pdf") -> "pdf"
