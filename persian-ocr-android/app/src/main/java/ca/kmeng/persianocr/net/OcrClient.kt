@@ -12,6 +12,10 @@ import java.net.UnknownHostException
 import java.util.UUID
 import javax.net.ssl.SSLException
 
+/** Extensions the server's SUPPORTED_SUFFIXES (persian_ocr/ingest.py) accepts. */
+private val RECOGNIZED_EXTENSIONS =
+    setOf("pdf", "png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff", "gif")
+
 /** One file to upload: its display name, its bytes source, and its MIME type. */
 data class UploadFile(
     val name: String,
@@ -258,14 +262,32 @@ fun uploadFileFrom(resolver: ContentResolver, uri: Uri, fallbackIndex: Int): Upl
         }
     }
     val mimeType = resolver.getType(uri) ?: "application/octet-stream"
-    val extension = when {
+    val mimeExtension = when {
         mimeType.contains("pdf") -> "pdf"
         mimeType.contains("png") -> "png"
         mimeType.contains("webp") -> "webp"
         mimeType.contains("jpeg") || mimeType.contains("jpg") -> "jpg"
+        mimeType.contains("bmp") -> "bmp"
+        mimeType.contains("tiff") -> "tif"
+        mimeType.contains("gif") -> "gif"
         else -> "bin"
     }
-    val name = displayName ?: "page-$fallbackIndex.$extension"
+    // Some content providers (gallery apps, cloud storage, Google Photos) hand back a
+    // DISPLAY_NAME with no extension, or one the server's whitelist doesn't recognize,
+    // even though the MIME type correctly identifies it as a supported image/PDF. The
+    // server keys its supported-file check purely off the filename suffix, so trusting
+    // an extension-less or unrecognized display name here silently gets the whole
+    // upload rejected with "no supported files were uploaded". Only keep the display
+    // name's own extension when it is one the server actually accepts.
+    val displayExtension = displayName?.substringAfterLast('.', "")?.lowercase()
+    val name = when {
+        displayExtension != null && displayExtension in RECOGNIZED_EXTENSIONS ->
+            displayName!!
+        displayName != null ->
+            "${displayName.substringBeforeLast('.')}.$mimeExtension"
+        else ->
+            "page-$fallbackIndex.$mimeExtension"
+    }
     return UploadFile(
         name = name,
         mimeType = mimeType,
